@@ -1,40 +1,31 @@
-# CashFlowGuard MVP
+# GuardConstruct
 
-**UK-first commercial risk checker for small construction firms and freelancers (under 25 employees).**
+**UK-first AI contract review for small construction firms & freelancers (under 25 employees).**
 
-Free first-pass review focused on the 10 most common payment traps under English law (Construction Act).
+Free first-pass commercial risk identification focused on the 10 most common payment traps under English law (Construction Act).
 
 > This is **commercial risk identification only**. It is **not legal advice**.
 
 ## Live site
 
-After enabling GitHub Pages (Settings → Pages → Deploy from branch `main`):
+Once deployed on Vercel the site will be available at your Vercel URL (e.g. `https://guardconstruct.vercel.app`).
 
-**https://buzz542.github.io/cashflowguard-mvp/**
+## How to finish setup (important)
 
-## Current status (what is already built)
+1. In Vercel → your project → **Settings → Environment Variables**
+2. Add:
+   - **Name:** `ANTHROPIC_API_KEY`
+   - **Value:** paste your Anthropic API key
+3. Save and **Redeploy**
 
-✅ Landing page + full mobile flow  
-✅ Context form (trade, size, duration, role)  
-✅ Contract text paste (best for iPad)  
-✅ Risk register with plain-English explanations + copy-paste suggested amendments  
-✅ Strong legal disclaimer on every screen  
-✅ The exact system prompt for a real AI (see `/prompts/system-prompt.md`)  
-✅ Keyword-based detection that already catches the most common traps  
+Without the key the AI review will not work.
 
-## What is NOT fully built yet (the real AI)
+## Tech
 
-The current version uses smart **keyword + pattern detection**.  
-It does **not** yet call a large language model (Claude / GPT).
-
-To turn it into a true AI system you still need:
-
-1. An API key (Anthropic Claude recommended, or OpenAI)
-2. A tiny backend that sends the contract text + context + the system prompt to the AI and returns the result
-3. (Optional) PDF text extraction so users can upload files instead of pasting
-
-The complete system prompt is already written and ready in:
-`prompts/system-prompt.md`
+- Next.js 14
+- Claude (Anthropic) via API
+- Tailwind CSS
+- Mobile-first (works great on iPad)
 
 ## The 10 payment traps checked
 
@@ -49,12 +40,9 @@ The complete system prompt is already written and ready in:
 9. Weak suspension rights on non-payment  
 10. Vague valuation language  
 
-## Next steps
+## Cost
 
-1. Enable GitHub Pages (if not already done)
-2. Test the current version with real contract text
-3. When ready for real AI: add a simple Vercel / Netlify function + API key
-4. Collect feedback from actual small contractors
+Each review typically costs 5p–20p using Claude Sonnet.
 
 ---
 
