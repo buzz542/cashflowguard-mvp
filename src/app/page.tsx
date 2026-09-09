@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 type Review = {
   id: string;
@@ -38,20 +38,17 @@ export default function HomePage() {
   const [error, setError] = useState("");
   const [showSubscribe, setShowSubscribe] = useState(false);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [fileName, setFileName] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load user + reviews from localStorage
   useEffect(() => {
     const savedUser = localStorage.getItem("gc_user");
     if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch {}
+      try { setUser(JSON.parse(savedUser)); } catch {}
     }
     const savedReviews = localStorage.getItem("gc_reviews");
     if (savedReviews) {
-      try {
-        setReviews(JSON.parse(savedReviews));
-      } catch {}
+      try { setReviews(JSON.parse(savedReviews)); } catch {}
     }
   }, []);
 
@@ -119,9 +116,30 @@ export default function HomePage() {
     setStep("upload");
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowed = ["text/plain", "text/markdown", "application/json", "text/csv"];
+    const isText = allowed.includes(file.type) || file.name.match(/\.(txt|md|text|csv)$/i);
+
+    if (!isText) {
+      alert("Please upload a text file (.txt). For PDFs or photos, copy the text and paste it below for now.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = (ev.target?.result as string) || "";
+      setContractText(text);
+      setFileName(file.name);
+    };
+    reader.readAsText(file);
+  };
+
   const runReview = async () => {
     if (!contractText.trim()) {
-      alert("Please paste some contract text (payment, retention and notice clauses work best).");
+      alert("Please paste some contract text or upload a text file.");
       return;
     }
     if (!user) return;
@@ -147,7 +165,6 @@ export default function HomePage() {
         throw new Error(data.error || "Review failed");
       }
 
-      // Mark free review as used
       const updatedUser = { ...user, freeUsed: true };
       localStorage.setItem("gc_user_" + user.email, JSON.stringify(updatedUser));
       saveUser(updatedUser);
@@ -168,34 +185,68 @@ export default function HomePage() {
     }
   };
 
-  // Simple markdown-ish to HTML for results
+  // Clean, readable results formatter
   const formatResult = (text: string) => {
-    // Strip any leading IMPORTANT DISCLAIMER block the model may still produce
-    let cleaned = text.replace(/^IMPORTANT DISCLAIMER[\s\S]*?(?=Project context used|Risk Register|$)/i, "").trim();
+    let cleaned = text
+      .replace(/^IMPORTANT DISCLAIMER[\s\S]*?(?=Project context used|Risk Register|\*\*Project context|$)/i, "")
+      .trim();
 
-    return cleaned
-      .split("\n")
-      .map((line, i) => {
-        if (line.startsWith("### ")) {
-          return `<h3 key=${i} class="text-lg font-bold mt-5 mb-2 text-gray-900">${line.replace(/^###\s*/, "")}</h3>`;
+    const lines = cleaned.split("\n");
+    let html = "";
+    let inBlockquote = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+
+      // Headings
+      if (line.startsWith("### ")) {
+        if (inBlockquote) { html += "</blockquote>"; inBlockquote = false; }
+        const title = line.replace(/^###\s*/, "").replace(/\*\*/g, "");
+        html += `<h3 class="text-base font-bold mt-6 mb-2 text-gray-900 border-b border-gray-100 pb-1">${title}</h3>`;
+        continue;
+      }
+      if (line.startsWith("## ")) {
+        if (inBlockquote) { html += "</blockquote>"; inBlockquote = false; }
+        const title = line.replace(/^##\s*/, "").replace(/\*\*/g, "");
+        html += `<h2 class="text-lg font-bold mt-8 mb-3 text-gray-900">${title}</h2>`;
+        continue;
+      }
+
+      // Blockquotes / suggested wording
+      if (line.startsWith("> ") || line.startsWith(">")) {
+        const content = line.replace(/^>\s*/, "");
+        if (!inBlockquote) {
+          html += `<blockquote class="border-l-4 border-blue-500 bg-blue-50 pl-3 pr-2 py-2 my-2 text-sm rounded-r-lg">`;
+          inBlockquote = true;
         }
-        if (line.startsWith("## ")) {
-          return `<h2 key=${i} class="text-xl font-bold mt-6 mb-3 text-gray-900">${line.replace(/^##\s*/, "")}</h2>`;
-        }
-        if (line.startsWith("**") && line.endsWith("**")) {
-          return `<p key=${i} class="font-semibold mt-3">${line.replace(/\*\*/g, "")}</p>`;
-        }
-        if (line.startsWith("> ")) {
-          return `<blockquote key=${i} class="border-l-4 border-blue-500 bg-blue-50 pl-3 py-2 my-2 text-sm rounded-r">${line.replace(/^>\s*/, "")}</blockquote>`;
-        }
-        if (line.trim() === "---" || line.trim() === "") {
-          return `<div key=${i} class="h-3"></div>`;
-        }
-        // Basic bold
-        const withBold = line.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-        return `<p key=${i} class="mb-2 text-sm leading-relaxed">${withBold}</p>`;
-      })
-      .join("");
+        html += `<p class="mb-1">${content.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")}</p>`;
+        continue;
+      } else if (inBlockquote) {
+        html += "</blockquote>";
+        inBlockquote = false;
+      }
+
+      // Horizontal rule / empty
+      if (line.trim() === "---" || line.trim() === "") {
+        html += `<div class="h-2"></div>`;
+        continue;
+      }
+
+      // Bold-only lines
+      if (line.startsWith("**") && line.endsWith("**")) {
+        html += `<p class="font-semibold mt-3 mb-1">${line.replace(/\*\*/g, "")}</p>`;
+        continue;
+      }
+
+      // Normal paragraph with inline bold
+      const withBold = line
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/\*(.+?)\*/g, "<em>$1</em>");
+      html += `<p class="mb-2 text-sm leading-relaxed text-gray-800">${withBold}</p>`;
+    }
+
+    if (inBlockquote) html += "</blockquote>";
+    return html;
   };
 
   // ========== AUTH MODAL ==========
@@ -210,22 +261,12 @@ export default function HomePage() {
             Your first review is free. No card needed.
           </p>
           <form onSubmit={handleAuth} className="space-y-3">
-            <input
-              type="email"
-              required
-              placeholder="Email"
+            <input type="email" required placeholder="Email"
               className="w-full rounded-lg border border-gray-300 px-3 py-2.5"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <input
-              type="password"
-              required
-              placeholder="Password (min 6 characters)"
+              value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input type="password" required placeholder="Password (min 6 characters)"
               className="w-full rounded-lg border border-gray-300 px-3 py-2.5"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+              value={password} onChange={(e) => setPassword(e.target.value)} />
             {authError && <p className="text-sm text-red-600">{authError}</p>}
             <button type="submit" className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl">
               {authMode === "signup" ? "Create account & continue" : "Log in & continue"}
@@ -233,24 +274,12 @@ export default function HomePage() {
           </form>
           <p className="text-xs text-center text-gray-500">
             {authMode === "signup" ? (
-              <>
-                Already have an account?{" "}
-                <button className="text-blue-600" onClick={() => setAuthMode("login")}>
-                  Log in
-                </button>
-              </>
+              <>Already have an account? <button className="text-blue-600" onClick={() => setAuthMode("login")}>Log in</button></>
             ) : (
-              <>
-                New here?{" "}
-                <button className="text-blue-600" onClick={() => setAuthMode("signup")}>
-                  Sign up
-                </button>
-              </>
+              <>New here? <button className="text-blue-600" onClick={() => setAuthMode("signup")}>Sign up</button></>
             )}
           </p>
-          <button className="text-xs text-gray-400 w-full text-center" onClick={() => setAuthMode(null)}>
-            Cancel
-          </button>
+          <button className="text-xs text-gray-400 w-full text-center" onClick={() => setAuthMode(null)}>Cancel</button>
         </div>
       </div>
     );
@@ -273,17 +302,12 @@ export default function HomePage() {
           </div>
           <button
             className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl"
-            onClick={() => alert("Payment integration coming next. For now just close this and continue testing.")}
+            onClick={() => alert("Payment will be connected soon. For now close this and continue testing.")}
           >
             Subscribe (coming soon)
           </button>
-          <button
-            className="w-full text-sm text-gray-500"
-            onClick={() => {
-              setShowSubscribe(false);
-              setStep("landing");
-            }}
-          >
+          <button className="w-full text-sm text-gray-500"
+            onClick={() => { setShowSubscribe(false); setStep("landing"); }}>
             Maybe later
           </button>
         </div>
@@ -291,10 +315,9 @@ export default function HomePage() {
     );
   }
 
-  // ========== MAIN APP SHELL ==========
+  // ========== MAIN APP ==========
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Header */}
       <header className="bg-white border-b sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="font-bold text-lg tracking-tight">
@@ -302,31 +325,23 @@ export default function HomePage() {
           </div>
           <div className="text-xs text-gray-500">English law • Under 25 staff</div>
         </div>
-        {/* Tabs */}
         <div className="max-w-2xl mx-auto px-4 flex gap-6 text-sm border-t">
-          <button
-            onClick={() => { setTab("home"); setStep("landing"); }}
-            className={`py-2.5 border-b-2 ${tab === "home" ? "border-blue-600 text-blue-600 font-medium" : "border-transparent text-gray-500"}`}
-          >
+          <button onClick={() => { setTab("home"); setStep("landing"); }}
+            className={`py-2.5 border-b-2 ${tab === "home" ? "border-blue-600 text-blue-600 font-medium" : "border-transparent text-gray-500"}`}>
             Home
           </button>
-          <button
-            onClick={() => setTab("reviews")}
-            className={`py-2.5 border-b-2 ${tab === "reviews" ? "border-blue-600 text-blue-600 font-medium" : "border-transparent text-gray-500"}`}
-          >
+          <button onClick={() => setTab("reviews")}
+            className={`py-2.5 border-b-2 ${tab === "reviews" ? "border-blue-600 text-blue-600 font-medium" : "border-transparent text-gray-500"}`}>
             My Reviews
           </button>
-          <button
-            onClick={() => setTab("about")}
-            className={`py-2.5 border-b-2 ${tab === "about" ? "border-blue-600 text-blue-600 font-medium" : "border-transparent text-gray-500"}`}
-          >
+          <button onClick={() => setTab("about")}
+            className={`py-2.5 border-b-2 ${tab === "about" ? "border-blue-600 text-blue-600 font-medium" : "border-transparent text-gray-500"}`}>
             About
           </button>
         </div>
       </header>
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-6 pb-24">
-        {/* ===== HOME TAB ===== */}
         {tab === "home" && (
           <>
             {step === "landing" && (
@@ -340,10 +355,8 @@ export default function HomePage() {
                     Free first-pass commercial review for small UK construction firms and freelancers.
                     Spot the clauses that delay or reduce payment before you sign.
                   </p>
-                  <button
-                    onClick={startReview}
-                    className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl text-lg"
-                  >
+                  <button onClick={startReview}
+                    className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl text-lg">
                     {user ? (user.freeUsed ? "Start another review →" : "Start free review →") : "Create free account & start →"}
                   </button>
                   <p className="text-xs text-gray-500">First review free • No card required • Not legal advice</p>
@@ -352,7 +365,7 @@ export default function HomePage() {
                 <div className="bg-white rounded-2xl border p-5 space-y-3">
                   <h2 className="font-bold text-lg">Built for people on site</h2>
                   <p className="text-sm text-gray-700">
-                    Paste the payment, retention and notice pages of a subcontract.
+                    Paste the payment, retention and notice pages of a subcontract (or upload a text file).
                     We flag the commercial traps that most often cause late or reduced payment
                     for firms under 25 people — under English law only.
                   </p>
@@ -429,11 +442,12 @@ export default function HomePage() {
             {step === "upload" && (
               <div className="space-y-6">
                 <div>
-                  <h1 className="text-2xl font-bold">Paste the contract</h1>
+                  <h1 className="text-2xl font-bold">Add the contract</h1>
                   <p className="text-gray-600 text-sm mt-1">
-                    Focus on payment, retention, notice, set-off and damages clauses.
+                    Paste text or upload a .txt file. Focus on payment, retention, notice, set-off and damages clauses.
                   </p>
                 </div>
+
                 <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm">
                   <p className="font-medium text-blue-900 mb-1">Context we will use:</p>
                   <ul className="text-blue-800 space-y-0.5">
@@ -443,19 +457,52 @@ export default function HomePage() {
                     <li>Role: {context.role}</li>
                   </ul>
                 </div>
+
                 <div className="bg-white rounded-2xl border p-5 space-y-4">
+                  {/* File upload */}
+                  <div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".txt,.md,.text,text/plain"
+                      className="hidden"
+                      onChange={handleFileUpload}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full border-2 border-dashed border-gray-300 rounded-xl py-4 text-sm text-gray-600 hover:border-blue-400 hover:text-blue-600"
+                    >
+                      {fileName ? `Uploaded: ${fileName}` : "Upload a text file (.txt)"}
+                    </button>
+                    <p className="text-xs text-gray-400 mt-1 text-center">
+                      PDFs and photos: copy the text and paste below for now
+                    </p>
+                  </div>
+
+                  <div className="relative">
+                    <div className="absolute inset-x-0 top-0 flex items-center justify-center">
+                      <span className="bg-white px-2 text-xs text-gray-400">or paste text</span>
+                    </div>
+                    <div className="border-t border-gray-200 mt-3 mb-3"></div>
+                  </div>
+
                   <textarea
-                    rows={12}
+                    rows={10}
                     placeholder="Paste the relevant clauses here..."
                     className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base"
                     value={contractText}
-                    onChange={(e) => setContractText(e.target.value)}
+                    onChange={(e) => { setContractText(e.target.value); setFileName(""); }}
                   />
+
                   {error && <p className="text-sm text-red-600">{error}</p>}
-                  <button onClick={runReview} className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl text-lg">
+
+                  <button onClick={runReview}
+                    className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl text-lg">
                     Run free first review →
                   </button>
                 </div>
+
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-900">
                   <strong>Remember:</strong> This is commercial risk identification only. It is <strong>not legal advice</strong>.
                 </div>
@@ -466,7 +513,7 @@ export default function HomePage() {
               <div className="text-center py-16 space-y-6">
                 <div className="text-4xl animate-pulse">⏳</div>
                 <h1 className="text-2xl font-bold">Reviewing your contract...</h1>
-                <p className="text-gray-600">Checking the clauses that most often delay payment under English law.</p>
+                <p className="text-gray-600">Checking the most common payment traps under English law.</p>
               </div>
             )}
 
@@ -474,21 +521,22 @@ export default function HomePage() {
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h1 className="text-2xl font-bold">Your risk register</h1>
-                  <button onClick={() => setStep("landing")} className="text-sm text-blue-600">New review</button>
+                  <button onClick={() => setStep("landing")} className="text-sm text-blue-600">
+                    New review
+                  </button>
                 </div>
 
                 <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm">
                   <p className="font-bold text-red-900 mb-1">IMPORTANT DISCLAIMER</p>
                   <p className="text-red-800">
                     This is commercial risk identification and suggested commercial wording only.
-                    It is <strong>not legal advice</strong>. It does not create a solicitor-client relationship.
-                    High-value or complex contracts should still be reviewed by a qualified construction solicitor.
-                    You remain fully responsible for any changes you make. Data is not used for model training.
+                    It is <strong>not legal advice</strong>. High-value or complex contracts should still
+                    be reviewed by a qualified construction solicitor.
                   </p>
                 </div>
 
                 <div
-                  className="bg-white rounded-2xl border p-5 prose prose-sm max-w-none"
+                  className="bg-white rounded-2xl border p-5"
                   dangerouslySetInnerHTML={{ __html: formatResult(result) }}
                 />
 
@@ -506,9 +554,8 @@ export default function HomePage() {
           </>
         )}
 
-        {/* ===== MY REVIEWS TAB ===== */}
         {tab === "reviews" && (
-          <div className="space-y-6">
+          <div className="space-y-4">
             <h1 className="text-2xl font-bold">My Reviews</h1>
             {!user && (
               <p className="text-gray-600 text-sm">Log in or create an account to save and view your reviews.</p>
@@ -526,7 +573,7 @@ export default function HomePage() {
                 <details className="text-sm">
                   <summary className="cursor-pointer text-blue-600">View full result</summary>
                   <div
-                    className="mt-3 prose prose-sm max-w-none"
+                    className="mt-3"
                     dangerouslySetInnerHTML={{ __html: formatResult(r.result) }}
                   />
                 </details>
@@ -535,7 +582,6 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* ===== ABOUT TAB ===== */}
         {tab === "about" && (
           <div className="space-y-6">
             <h1 className="text-2xl font-bold">About GuardConstruct</h1>
