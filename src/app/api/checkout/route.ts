@@ -29,7 +29,6 @@ export async function POST(req: NextRequest) {
       process.env.NEXT_PUBLIC_APP_URL ||
       "https://cashflowguard-mvp.vercel.app";
 
-    // Do not pass payment_method_types — Managed Payments is enabled on this account
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
@@ -37,11 +36,13 @@ export async function POST(req: NextRequest) {
       cancel_url: `${origin}/?checkout=cancel`,
       customer_email: email || undefined,
       allow_promotion_codes: true,
+      // Avoid Managed Payments tax_code requirements during test setup
+      managed_payments: { enabled: false },
       metadata: {
         app: "guardconstruct",
         plan: "pro"
       }
-    });
+    } as any);
 
     if (!session.url) {
       return NextResponse.json({ error: "No checkout URL returned" }, { status: 500 });
