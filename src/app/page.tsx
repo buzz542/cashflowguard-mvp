@@ -64,6 +64,12 @@ export default function HomePage() {
         const u = JSON.parse(savedUser) as User;
         if (u.verified === undefined) u.verified = true;
         setUser(u);
+        // Pro users land in the app, not the free marketing page
+        if (u.verified && u.isPro) {
+          setView("app");
+          setTab("home");
+          setStep("landing");
+        }
       } catch {}
     }
     const savedReviews = localStorage.getItem("gc_reviews");
@@ -88,6 +94,9 @@ export default function HomePage() {
                 localStorage.setItem("gc_user", JSON.stringify(u));
                 localStorage.setItem("gc_user_" + u.email, JSON.stringify(u));
                 setUser(u);
+                setView("app");
+                setTab("home");
+                setStep("landing");
                 setCheckoutMsg("Pro unlocked. You can run unlimited checks.");
               } else {
                 setCheckoutMsg("Payment received. Log in with the same email to unlock Pro.");
@@ -207,7 +216,8 @@ export default function HomePage() {
       saveUser(u);
       setAuthMode(null);
       setView("app");
-      setStep("context");
+      setTab("home");
+      setStep(u.isPro || !u.freeUsed ? "landing" : "landing");
     }
   };
 
@@ -230,7 +240,7 @@ export default function HomePage() {
     setShowVerify(false);
     setDevCode("");
     setView("app");
-    setStep("context");
+    setStep("landing");
   };
 
   const startCheck = () => {
@@ -250,6 +260,7 @@ export default function HomePage() {
       return;
     }
     setView("app");
+    setTab("home");
     setStep("context");
   };
 
@@ -261,24 +272,14 @@ export default function HomePage() {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setError("");
     setExtracting(true);
-
     try {
       const form = new FormData();
       form.append("file", file);
-
-      const res = await fetch("/api/extract", {
-        method: "POST",
-        body: form
-      });
+      const res = await fetch("/api/extract", { method: "POST", body: form });
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Could not read this file");
-      }
-
+      if (!res.ok) throw new Error(data.error || "Could not read this file");
       setContractText(data.text || "");
       setFileName(data.fileName || file.name);
     } catch (err: any) {
@@ -311,8 +312,7 @@ export default function HomePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Review failed");
       if (!user.isPro) {
-        const updatedUser = { ...user, freeUsed: true };
-        saveUser(updatedUser);
+        saveUser({ ...user, freeUsed: true });
       }
       setResult(data.result);
       saveReview({
@@ -394,7 +394,7 @@ export default function HomePage() {
             <p className="text-xs text-gray-500">Signed in as</p>
             <p className="text-sm font-medium text-gray-900 truncate">{user.email}</p>
             <p className="text-xs text-gray-500 mt-1">
-              {user.isPro ? "Pro plan" : user.freeUsed ? "Free check used" : "Free check available"}
+              {user.isPro ? "Pro plan · unlimited checks" : user.freeUsed ? "Free check used" : "Free check available"}
             </p>
             {!user.isPro && (
               <button
@@ -488,6 +488,7 @@ export default function HomePage() {
     );
   }
 
+  // ========== PUBLIC MARKETING (not Pro) ==========
   if (view === "marketing") {
     return (
       <div className="min-h-screen flex flex-col" onClick={() => showProfile && setShowProfile(false)}>
@@ -498,7 +499,9 @@ export default function HomePage() {
               {user && user.verified ? <ProfileButton /> : (
                 <button onClick={() => setAuthMode("login")} className="text-sm text-gray-600">Log in</button>
               )}
-              <button onClick={startCheck} className="bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-lg">Check a document</button>
+              <button onClick={startCheck} className="bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-lg">
+                {user?.isPro ? "New check" : "Check a document"}
+              </button>
             </div>
           </div>
         </header>
@@ -513,8 +516,10 @@ export default function HomePage() {
               <p className="text-xs font-semibold tracking-widest text-blue-600 uppercase mb-4">Built for UK contractors</p>
               <h1 className="text-4xl sm:text-5xl font-bold tracking-tight leading-[1.15]">Before you sign it,<br />know what it means.</h1>
               <p className="mt-5 text-lg text-gray-600">Upload a contract or variation. Get a plain-English explanation — including anything that could affect your payment.</p>
-              <button onClick={startCheck} className="mt-8 w-full sm:w-auto bg-blue-600 text-white font-semibold px-8 py-3.5 rounded-xl">Check a document — Free</button>
-              <p className="mt-3 text-sm text-gray-500">No credit card · Results in minutes · Built for construction</p>
+              <button onClick={startCheck} className="mt-8 w-full sm:w-auto bg-blue-600 text-white font-semibold px-8 py-3.5 rounded-xl">
+                Check a document — Free
+              </button>
+              <p className="mt-3 text-sm text-gray-500">No credit card · Results in minutes</p>
             </div>
           </section>
           <section id="pricing" className="py-16 border-t">
@@ -524,11 +529,13 @@ export default function HomePage() {
                 <div className="rounded-2xl border-2 border-blue-600 p-6">
                   <p className="text-sm font-semibold text-blue-600">Free</p>
                   <p className="mt-1 text-3xl font-bold">£0</p>
+                  <p className="text-sm text-gray-500">1 document check</p>
                   <button onClick={startCheck} className="mt-6 w-full bg-blue-600 text-white font-semibold py-2.5 rounded-xl">Check a document — Free</button>
                 </div>
                 <div className="rounded-2xl border border-gray-200 p-6">
                   <p className="text-sm font-semibold text-gray-500">Pro</p>
                   <p className="mt-1 text-3xl font-bold">£19<span className="text-base font-normal text-gray-500">/month</span></p>
+                  <p className="text-sm text-gray-500">Unlimited checks</p>
                   <button onClick={() => { if (!user) setAuthMode("signup"); else setShowSubscribe(true); }} className="mt-6 w-full border border-gray-300 font-semibold py-2.5 rounded-xl">Subscribe</button>
                 </div>
               </div>
@@ -540,12 +547,20 @@ export default function HomePage() {
     );
   }
 
+  // ========== LOGGED-IN APP (incl. Pro dashboard) ==========
   return (
     <div className="min-h-screen flex flex-col bg-[#FAFAF9]" onClick={() => showProfile && setShowProfile(false)}>
       <header className="bg-white border-b sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-          <button onClick={() => { setView("marketing"); setStep("landing"); }} className="font-bold text-lg">Guard<span className="text-blue-600">Construct</span></button>
-          <ProfileButton />
+          <button onClick={() => { setTab("home"); setStep("landing"); }} className="font-bold text-lg">
+            Guard<span className="text-blue-600">Construct</span>
+          </button>
+          <div className="flex items-center gap-2">
+            {user?.isPro && (
+              <span className="text-xs font-semibold bg-blue-50 text-blue-700 px-2 py-1 rounded-full">Pro</span>
+            )}
+            <ProfileButton />
+          </div>
         </div>
         <div className="max-w-2xl mx-auto px-4 flex gap-6 text-sm border-t">
           <button onClick={() => { setTab("home"); setStep("landing"); }} className={`py-2.5 border-b-2 ${tab === "home" ? "border-blue-600 text-blue-600 font-medium" : "border-transparent text-gray-500"}`}>Home</button>
@@ -555,15 +570,64 @@ export default function HomePage() {
       </header>
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-6 pb-24">
+        {checkoutMsg && (
+          <div className="mb-4 bg-green-50 border border-green-200 text-green-900 text-sm rounded-xl px-4 py-3">{checkoutMsg}</div>
+        )}
+
         {tab === "home" && (
           <>
             {step === "landing" && (
-              <div className="space-y-6 text-center pt-6">
-                <h1 className="text-2xl font-bold">Check a document</h1>
-                <p className="text-gray-600 text-sm">{user?.isPro ? "Pro plan — unlimited checks." : "First check is free."}</p>
-                <button onClick={startCheck} className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl">Start check →</button>
+              <div className="space-y-6">
+                <div className="bg-white rounded-2xl border p-5 space-y-3">
+                  <p className="text-xs font-semibold tracking-wide text-blue-600 uppercase">
+                    {user?.isPro ? "Your Pro account" : "Your account"}
+                  </p>
+                  <h1 className="text-2xl font-bold">
+                    {user?.isPro ? "Ready for the next document?" : "Check a document"}
+                  </h1>
+                  <p className="text-sm text-gray-600">
+                    {user?.isPro
+                      ? "Unlimited checks. Upload a contract, variation or site instruction."
+                      : "First check is free."}
+                  </p>
+                  <button onClick={startCheck} className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl">
+                    {user?.isPro ? "Start a new check →" : "Start check →"}
+                  </button>
+                </div>
+
+                {reviews.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h2 className="font-semibold text-gray-900">Recent checks</h2>
+                      <button onClick={() => setTab("reviews")} className="text-sm text-blue-600">View all</button>
+                    </div>
+                    {reviews.slice(0, 3).map((r) => (
+                      <button
+                        key={r.id}
+                        onClick={() => {
+                          setResult(r.result);
+                          setTab("home");
+                          setStep("results");
+                        }}
+                        className="w-full text-left bg-white rounded-2xl border p-4 hover:border-blue-300 transition"
+                      >
+                        <div className="flex justify-between text-sm">
+                          <span className="font-medium">{r.trade || "Document check"}</span>
+                          <span className="text-gray-500">{r.date}</span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">{r.projectSize}</p>
+                        <p className="text-xs text-gray-400 mt-2 line-clamp-2">{r.contractPreview}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {reviews.length === 0 && user?.isPro && (
+                  <p className="text-sm text-gray-500 text-center py-4">No checks yet. Run your first one above.</p>
+                )}
               </div>
             )}
+
             {step === "context" && (
               <div className="space-y-6">
                 <h1 className="text-2xl font-bold">About this job</h1>
@@ -606,13 +670,12 @@ export default function HomePage() {
                 </form>
               </div>
             )}
+
             {step === "upload" && (
               <div className="space-y-6">
                 <div>
                   <h1 className="text-2xl font-bold">Add the document</h1>
-                  <p className="text-gray-600 text-sm mt-1">
-                    Upload a Word file (.docx) or .txt, or paste the text.
-                  </p>
+                  <p className="text-gray-600 text-sm mt-1">Upload a Word file (.docx) or .txt, or paste the text.</p>
                 </div>
                 <div className="bg-white rounded-2xl border p-5 space-y-4">
                   <input
@@ -628,11 +691,7 @@ export default function HomePage() {
                     onClick={() => fileInputRef.current?.click()}
                     className="w-full border-2 border-dashed border-gray-300 rounded-xl py-4 text-sm text-gray-600 disabled:opacity-60"
                   >
-                    {extracting
-                      ? "Reading file…"
-                      : fileName
-                        ? `Uploaded: ${fileName}`
-                        : "Upload Word (.docx) or text file"}
+                    {extracting ? "Reading file…" : fileName ? `Uploaded: ${fileName}` : "Upload Word (.docx) or text file"}
                   </button>
                   <p className="text-xs text-center text-gray-400">PDF and photos: paste the text for now</p>
                   <textarea
@@ -643,29 +702,32 @@ export default function HomePage() {
                     onChange={(e) => { setContractText(e.target.value); setFileName(""); }}
                   />
                   {error && <p className="text-sm text-red-600">{error}</p>}
-                  <button onClick={runReview} className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl">
-                    Run check →
-                  </button>
+                  <button onClick={runReview} className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl">Run check →</button>
                 </div>
               </div>
             )}
+
             {step === "loading" && (
               <div className="text-center py-16 space-y-4">
                 <div className="text-3xl animate-pulse">⏳</div>
                 <h1 className="text-xl font-bold">Checking the document...</h1>
               </div>
             )}
+
             {step === "results" && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h1 className="text-2xl font-bold">What to check before signing</h1>
-                  <button onClick={() => setStep("landing")} className="text-sm text-blue-600">New check</button>
+                  <button onClick={() => setStep("landing")} className="text-sm text-blue-600">Done</button>
                 </div>
                 <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm">
                   <p className="font-bold text-red-900">Not legal advice</p>
                   <p className="text-red-800 mt-1">Commercial risk identification only.</p>
                 </div>
                 <div className="bg-white rounded-2xl border p-5" dangerouslySetInnerHTML={{ __html: formatResult(result) }} />
+                <button onClick={startCheck} className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl">
+                  Start another check →
+                </button>
               </div>
             )}
           </>
@@ -674,7 +736,7 @@ export default function HomePage() {
         {tab === "reviews" && (
           <div className="space-y-4">
             <h1 className="text-2xl font-bold">My Reviews</h1>
-            {reviews.length === 0 && <p className="text-sm text-gray-600">No reviews yet.</p>}
+            {reviews.length === 0 && <p className="text-sm text-gray-600">No reviews yet. Run a check from Home.</p>}
             {reviews.map((r) => (
               <div key={r.id} className="bg-white rounded-2xl border p-5 space-y-2">
                 <div className="flex justify-between text-sm">
@@ -693,8 +755,10 @@ export default function HomePage() {
         {tab === "about" && (
           <div className="space-y-4">
             <h1 className="text-2xl font-bold">About</h1>
-            <div className="bg-white rounded-2xl border p-5 text-sm text-gray-700">
-              <p>GuardConstruct helps small UK contractors understand construction paperwork before they sign. Not legal advice.</p>
+            <div className="bg-white rounded-2xl border p-5 text-sm text-gray-700 space-y-2">
+              <p>GuardConstruct helps small UK contractors understand construction paperwork before they sign.</p>
+              <p className="text-gray-500">Commercial risk identification only. Not legal advice.</p>
+              {user?.isPro && <p className="text-blue-700 font-medium">You are on the Pro plan.</p>}
             </div>
           </div>
         )}
