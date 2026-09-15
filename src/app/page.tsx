@@ -54,6 +54,7 @@ export default function HomePage() {
   const [showSubscribe, setShowSubscribe] = useState(false);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [fileName, setFileName] = useState("");
+  const [extracting, setExtracting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -70,7 +71,6 @@ export default function HomePage() {
       try { setReviews(JSON.parse(savedReviews)); } catch {}
     }
 
-    // Handle return from Stripe Checkout
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const checkout = params.get("checkout");
@@ -258,25 +258,41 @@ export default function HomePage() {
     setStep("upload");
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const isText = file.type.startsWith("text/") || /\.(txt|md|text|csv)$/i.test(file.name);
-    if (!isText) {
-      alert("Please upload a text file (.txt). For PDFs or photos, copy the text and paste it below for now.");
-      return;
+
+    setError("");
+    setExtracting(true);
+
+    try {
+      const form = new FormData();
+      form.append("file", file);
+
+      const res = await fetch("/api/extract", {
+        method: "POST",
+        body: form
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Could not read this file");
+      }
+
+      setContractText(data.text || "");
+      setFileName(data.fileName || file.name);
+    } catch (err: any) {
+      setError(err.message || "Could not read this file. Try pasting the text instead.");
+      setFileName("");
+    } finally {
+      setExtracting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setContractText((ev.target?.result as string) || "");
-      setFileName(file.name);
-    };
-    reader.readAsText(file);
   };
 
   const runReview = async () => {
     if (!contractText.trim()) {
-      alert("Please paste some contract text or upload a text file.");
+      alert("Please upload a .docx / .txt file or paste the contract text.");
       return;
     }
     if (!user || !user.verified) return;
@@ -294,7 +310,6 @@ export default function HomePage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Review failed");
-      // Only mark free used if not Pro
       if (!user.isPro) {
         const updatedUser = { ...user, freeUsed: true };
         saveUser(updatedUser);
@@ -389,10 +404,7 @@ export default function HomePage() {
                 Upgrade to Pro
               </button>
             )}
-            <button
-              onClick={logout}
-              className="mt-1 w-full text-left text-sm text-red-600 hover:bg-red-50 rounded-lg px-2 py-1.5"
-            >
+            <button onClick={logout} className="mt-1 w-full text-left text-sm text-red-600 hover:bg-red-50 rounded-lg px-2 py-1.5">
               Log out
             </button>
           </div>
@@ -467,16 +479,10 @@ export default function HomePage() {
             <p>• Cancel anytime</p>
           </div>
           {authError && <p className="text-sm text-red-600">{authError}</p>}
-          <button
-            className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl disabled:opacity-60"
-            disabled={checkoutLoading}
-            onClick={startCheckout}
-          >
+          <button className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl disabled:opacity-60" disabled={checkoutLoading} onClick={startCheckout}>
             {checkoutLoading ? "Opening Stripe…" : "Subscribe with Stripe"}
           </button>
-          <button className="w-full text-sm text-gray-500" onClick={() => { setShowSubscribe(false); setView("marketing"); }}>
-            Maybe later
-          </button>
+          <button className="w-full text-sm text-gray-500" onClick={() => { setShowSubscribe(false); setView("marketing"); }}>Maybe later</button>
         </div>
       </div>
     );
@@ -488,10 +494,6 @@ export default function HomePage() {
         <header className="sticky top-0 z-20 bg-[#FAFAF9]/90 backdrop-blur border-b border-gray-200/80">
           <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
             <div className="font-bold text-lg tracking-tight">Guard<span className="text-blue-600">Construct</span></div>
-            <nav className="hidden sm:flex items-center gap-6 text-sm text-gray-600">
-              <a href="#how" className="hover:text-gray-900">How it works</a>
-              <a href="#pricing" className="hover:text-gray-900">Pricing</a>
-            </nav>
             <div className="flex items-center gap-3">
               {user && user.verified ? <ProfileButton /> : (
                 <button onClick={() => setAuthMode("login")} className="text-sm text-gray-600">Log in</button>
@@ -500,69 +502,40 @@ export default function HomePage() {
             </div>
           </div>
         </header>
-
         <main>
           {checkoutMsg && (
             <div className="max-w-5xl mx-auto px-4 pt-4">
               <div className="bg-green-50 border border-green-200 text-green-900 text-sm rounded-xl px-4 py-3">{checkoutMsg}</div>
             </div>
           )}
-
           <section className="max-w-5xl mx-auto px-4 pt-12 pb-16 sm:pt-20">
             <div className="text-center max-w-2xl mx-auto">
               <p className="text-xs font-semibold tracking-widest text-blue-600 uppercase mb-4">Built for UK contractors</p>
               <h1 className="text-4xl sm:text-5xl font-bold tracking-tight leading-[1.15]">Before you sign it,<br />know what it means.</h1>
-              <p className="mt-5 text-lg text-gray-600">Take a photo of a contract, variation or site instruction. Get a plain-English explanation — including anything that could affect your payment.</p>
+              <p className="mt-5 text-lg text-gray-600">Upload a contract or variation. Get a plain-English explanation — including anything that could affect your payment.</p>
               <button onClick={startCheck} className="mt-8 w-full sm:w-auto bg-blue-600 text-white font-semibold px-8 py-3.5 rounded-xl">Check a document — Free</button>
               <p className="mt-3 text-sm text-gray-500">No credit card · Results in minutes · Built for construction</p>
             </div>
           </section>
-
-          <section id="how" className="bg-white border-y border-gray-200 py-16">
-            <div className="max-w-5xl mx-auto px-4">
-              <h2 className="text-2xl font-bold text-center">From paperwork to answers in minutes.</h2>
-              <div className="mt-10 grid sm:grid-cols-3 gap-8">
-                {["Photograph", "Analyse", "Decide"].map((t, i) => (
-                  <div key={t} className="text-center sm:text-left">
-                    <p className="text-sm font-semibold text-blue-600">0{i + 1}</p>
-                    <p className="mt-2 font-semibold">{t}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          <section id="pricing" className="py-16">
+          <section id="pricing" className="py-16 border-t">
             <div className="max-w-3xl mx-auto px-4 text-center">
               <h2 className="text-2xl font-bold">Try it before you pay.</h2>
               <div className="mt-10 grid sm:grid-cols-2 gap-4 text-left">
                 <div className="rounded-2xl border-2 border-blue-600 p-6">
                   <p className="text-sm font-semibold text-blue-600">Free</p>
                   <p className="mt-1 text-3xl font-bold">£0</p>
-                  <p className="text-sm text-gray-500">1 document check</p>
                   <button onClick={startCheck} className="mt-6 w-full bg-blue-600 text-white font-semibold py-2.5 rounded-xl">Check a document — Free</button>
                 </div>
                 <div className="rounded-2xl border border-gray-200 p-6">
                   <p className="text-sm font-semibold text-gray-500">Pro</p>
                   <p className="mt-1 text-3xl font-bold">£19<span className="text-base font-normal text-gray-500">/month</span></p>
-                  <p className="text-sm text-gray-500">Unlimited checks</p>
                   <button onClick={() => { if (!user) setAuthMode("signup"); else setShowSubscribe(true); }} className="mt-6 w-full border border-gray-300 font-semibold py-2.5 rounded-xl">Subscribe</button>
                 </div>
               </div>
             </div>
           </section>
-
-          <section className="bg-gray-900 text-white py-16">
-            <div className="max-w-2xl mx-auto px-4 text-center">
-              <h2 className="text-2xl font-bold">The next time someone puts paperwork in front of you, check it first.</h2>
-              <button onClick={startCheck} className="mt-8 bg-white text-gray-900 font-semibold px-8 py-3.5 rounded-xl">Check a document — Free</button>
-            </div>
-          </section>
         </main>
-
-        <footer className="border-t py-8 text-center text-xs text-gray-500">
-          Commercial risk identification only. Not legal advice.
-        </footer>
+        <footer className="border-t py-8 text-center text-xs text-gray-500">Commercial risk identification only. Not legal advice.</footer>
       </div>
     );
   }
@@ -597,7 +570,7 @@ export default function HomePage() {
                 <form onSubmit={handleContextSubmit} className="bg-white rounded-2xl border p-5 space-y-4">
                   <div>
                     <label className="block text-sm font-medium mb-1">Trade / work</label>
-                    <input required type="text" placeholder="e.g. Electrical" className="w-full rounded-lg border px-3 py-2.5" value={context.trade} onChange={(e) => setContext({ ...context, trade: e.target.value })} />
+                    <input required type="text" placeholder="e.g. Framing, Electrical" className="w-full rounded-lg border px-3 py-2.5" value={context.trade} onChange={(e) => setContext({ ...context, trade: e.target.value })} />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">Package size</label>
@@ -635,15 +608,44 @@ export default function HomePage() {
             )}
             {step === "upload" && (
               <div className="space-y-6">
-                <h1 className="text-2xl font-bold">Add the document</h1>
+                <div>
+                  <h1 className="text-2xl font-bold">Add the document</h1>
+                  <p className="text-gray-600 text-sm mt-1">
+                    Upload a Word file (.docx) or .txt, or paste the text.
+                  </p>
+                </div>
                 <div className="bg-white rounded-2xl border p-5 space-y-4">
-                  <input ref={fileInputRef} type="file" accept=".txt,.md,.text,text/plain" className="hidden" onChange={handleFileUpload} />
-                  <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full border-2 border-dashed border-gray-300 rounded-xl py-4 text-sm text-gray-600">
-                    {fileName ? `Uploaded: ${fileName}` : "Upload a text file (.txt)"}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".docx,.txt,.md,.text,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                  <button
+                    type="button"
+                    disabled={extracting}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full border-2 border-dashed border-gray-300 rounded-xl py-4 text-sm text-gray-600 disabled:opacity-60"
+                  >
+                    {extracting
+                      ? "Reading file…"
+                      : fileName
+                        ? `Uploaded: ${fileName}`
+                        : "Upload Word (.docx) or text file"}
                   </button>
-                  <textarea rows={10} placeholder="Or paste clauses here..." className="w-full rounded-lg border px-3 py-2.5" value={contractText} onChange={(e) => { setContractText(e.target.value); setFileName(""); }} />
+                  <p className="text-xs text-center text-gray-400">PDF and photos: paste the text for now</p>
+                  <textarea
+                    rows={10}
+                    placeholder="Or paste the contract text here..."
+                    className="w-full rounded-lg border px-3 py-2.5"
+                    value={contractText}
+                    onChange={(e) => { setContractText(e.target.value); setFileName(""); }}
+                  />
                   {error && <p className="text-sm text-red-600">{error}</p>}
-                  <button onClick={runReview} className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl">Run check →</button>
+                  <button onClick={runReview} className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl">
+                    Run check →
+                  </button>
                 </div>
               </div>
             )}
