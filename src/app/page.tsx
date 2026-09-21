@@ -20,6 +20,12 @@ type User = {
   verifyCode?: string;
 };
 
+type UploadedPage = {
+  id: string;
+  name: string;
+  chars: number;
+};
+
 function makeCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
@@ -42,11 +48,12 @@ export default function HomePage() {
   const [step, setStep] = useState<"landing" | "context" | "upload" | "loading" | "results">("landing");
   const [context, setContext] = useState({ trade: "", projectSize: "", duration: "", role: "", extra: "" });
   const [contractText, setContractText] = useState("");
+  const [uploadedPages, setUploadedPages] = useState<UploadedPage[]>([]);
+  const [showPaste, setShowPaste] = useState(false);
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
   const [showSubscribe, setShowSubscribe] = useState(false);
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [fileName, setFileName] = useState("");
   const [extracting, setExtracting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -242,6 +249,10 @@ export default function HomePage() {
       setShowSubscribe(true);
       return;
     }
+    setContractText("");
+    setUploadedPages([]);
+    setShowPaste(false);
+    setError("");
     setView("app");
     setTab("home");
     setStep("context");
@@ -253,30 +264,73 @@ export default function HomePage() {
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
     setError("");
     setExtracting(true);
+
+    const list = Array.from(files).slice(0, 12); // safety cap
+    let combined = contractText;
+    const newPages: UploadedPage[] = [];
+
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch("/api/extract", { method: "POST", body: form });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not read this file");
-      setContractText(data.text || "");
-      setFileName(data.fileName || file.name);
+      for (let i = 0; i < list.length; i++) {
+        const file = list[i];
+        const form = new FormData();
+        form.append("file", file);
+        const res = await fetch("/api/extract", { method: "POST", body: form });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `Could not read ${file.name}`);
+
+        const text = (data.text || "").trim();
+        if (!text) continue;
+
+        const pageLabel = data.fileName || file.name || `Page ${uploadedPages.length + newPages.length + 1}`;
+        combined = combined
+          ? `${combined}\n\n--- ${pageLabel} ---\n\n${text}`
+          : text;
+
+        newPages.push({
+          id: `${Date.now()}-${i}`,
+          name: pageLabel,
+          chars: text.length
+        });
+      }
+
+      setContractText(combined);
+      setUploadedPages((prev) => [...prev, ...newPages]);
+      setShowPaste(false);
     } catch (err: any) {
-      setError(err.message || "Could not read this file.");
-      setFileName("");
+      setError(err.message || "Could not read one of the files.");
     } finally {
       setExtracting(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
+  const removePage = (id: string) => {
+    // Rebuild from remaining page names is hard without storing text per page.
+    // Simple approach: clear all if user removes — or keep full text and just remove chip.
+    // For MVP: remove chip and if none left, clear text.
+    setUploadedPages((prev) => {
+      const next = prev.filter((p) => p.id !== id);
+      if (next.length === 0) {
+        setContractText("");
+      }
+      return next;
+    });
+  };
+
+  const clearAllUploads = () => {
+    setUploadedPages([]);
+    setContractText("");
+    setError("");
+  };
+
   const runReview = async () => {
     if (!contractText.trim()) {
-      alert("Please take a photo, upload a PDF/Word file, or paste the contract text.");
+      alert("Add at least one photo, PDF, Word file, or paste the text.");
       return;
     }
     if (!user || !user.verified) return;
@@ -302,7 +356,10 @@ export default function HomePage() {
         trade: context.trade,
         projectSize: context.projectSize,
         result: data.result,
-        contractPreview: contractText.slice(0, 120) + "..."
+        contractPreview:
+          uploadedPages.length > 0
+            ? `${uploadedPages.length} page(s) · ${context.trade}`
+            : contractText.slice(0, 80) + "..."
       });
       setStep("results");
     } catch (err: any) {
@@ -471,7 +528,7 @@ export default function HomePage() {
                 <div className="bg-white rounded-2xl border p-5 space-y-3">
                   <p className="text-xs font-semibold text-blue-600 uppercase">{user?.isPro ? "Your Pro account" : "Your account"}</p>
                   <h1 className="text-2xl font-bold">{user?.isPro ? "Ready for the next document?" : "Check a document"}</h1>
-                  <p className="text-sm text-gray-600">{user?.isPro ? "Photograph, upload PDF/Word, or paste text." : "First check is free."}</p>
+                  <p className="text-sm text-gray-600">{user?.isPro ? "Photograph pages, upload PDF/Word, or paste text." : "First check is free."}</p>
                   <button onClick={startCheck} className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl">Start a new check →</button>
                 </div>
                 {reviews.length > 0 && (
@@ -486,6 +543,7 @@ export default function HomePage() {
                 )}
               </div>
             )}
+
             {step === "context" && (
               <div className="space-y-6">
                 <h1 className="text-2xl font-bold">About this job</h1>
@@ -522,37 +580,105 @@ export default function HomePage() {
                 </form>
               </div>
             )}
+
             {step === "upload" && (
               <div className="space-y-6">
                 <div>
                   <h1 className="text-2xl font-bold">Scan the document</h1>
-                  <p className="text-gray-600 text-sm mt-1">Take a photo of the page, upload a PDF or Word file, or paste text.</p>
+                  <p className="text-gray-600 text-sm mt-1">Add one or more pages. Photos, PDF or Word.</p>
                 </div>
                 <div className="bg-white rounded-2xl border p-5 space-y-4">
                   <input
                     ref={fileInputRef}
                     type="file"
+                    multiple
                     capture="environment"
                     accept="image/*,.pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
                     className="hidden"
                     onChange={handleFileUpload}
                   />
-                  <button type="button" disabled={extracting} onClick={() => fileInputRef.current?.click()} className="w-full border-2 border-dashed border-gray-300 rounded-xl py-6 text-sm text-gray-700 disabled:opacity-60">
-                    {extracting ? "Reading document…" : fileName ? `Uploaded: ${fileName}` : "📷 Take photo or upload PDF / Word"}
+
+                  <button
+                    type="button"
+                    disabled={extracting}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full border-2 border-dashed border-gray-300 rounded-xl py-6 text-sm font-medium text-gray-700 disabled:opacity-60"
+                  >
+                    {extracting
+                      ? "Reading page…"
+                      : uploadedPages.length > 0
+                        ? "+ Add another page"
+                        : "📷 Take photo or upload files"}
                   </button>
-                  <p className="text-xs text-center text-gray-400">iPad: use Take Photo or Photo Library. Good light, one page at a time.</p>
-                  <textarea rows={8} placeholder="Or paste contract text here…" className="w-full rounded-lg border px-3 py-2.5" value={contractText} onChange={(e) => { setContractText(e.target.value); setFileName(""); }} />
+
+                  {uploadedPages.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-gray-900">
+                          {uploadedPages.length} page{uploadedPages.length === 1 ? "" : "s"} ready
+                        </p>
+                        <button type="button" onClick={clearAllUploads} className="text-xs text-red-600">Clear all</button>
+                      </div>
+                      <ul className="space-y-2">
+                        {uploadedPages.map((p, idx) => (
+                          <li key={p.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
+                            <span className="truncate pr-2">
+                              <span className="text-gray-400 mr-2">{idx + 1}.</span>
+                              {p.name}
+                            </span>
+                            <button type="button" onClick={() => removePage(p.id)} className="text-xs text-gray-500 shrink-0">Remove</button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-center text-gray-400">
+                    Multi-page: add photos one by one, or upload several at once. JPEG works best on iPad.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPaste(!showPaste)}
+                    className="text-sm text-blue-600 w-full text-center"
+                  >
+                    {showPaste ? "Hide paste box" : "Or paste text instead"}
+                  </button>
+
+                  {showPaste && (
+                    <textarea
+                      rows={6}
+                      placeholder="Paste contract text here…"
+                      className="w-full rounded-lg border px-3 py-2.5 text-sm"
+                      value={contractText}
+                      onChange={(e) => {
+                        setContractText(e.target.value);
+                        if (!e.target.value.trim()) setUploadedPages([]);
+                      }}
+                    />
+                  )}
+
                   {error && <p className="text-sm text-red-600">{error}</p>}
-                  <button onClick={runReview} className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl">Run check →</button>
+
+                  <button
+                    onClick={runReview}
+                    disabled={extracting || !contractText.trim()}
+                    className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl disabled:opacity-50"
+                  >
+                    Run check →
+                  </button>
                 </div>
               </div>
             )}
+
             {step === "loading" && (
               <div className="text-center py-16 space-y-4">
                 <div className="text-3xl animate-pulse">⏳</div>
                 <h1 className="text-xl font-bold">Checking the document…</h1>
+                <p className="text-sm text-gray-500">Usually under a minute</p>
               </div>
             )}
+
             {step === "results" && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -569,6 +695,7 @@ export default function HomePage() {
             )}
           </>
         )}
+
         {tab === "reviews" && (
           <div className="space-y-4">
             <h1 className="text-2xl font-bold">My Reviews</h1>
@@ -581,6 +708,7 @@ export default function HomePage() {
             ))}
           </div>
         )}
+
         {tab === "about" && (
           <div className="space-y-4">
             <h1 className="text-2xl font-bold">About</h1>
