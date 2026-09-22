@@ -5,13 +5,13 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "GuardConstruct – Before you sign it, know what it means",
   description:
-    "Take a photo of a construction contract, variation or site instruction. Get a plain-English explanation of what you’re agreeing to — including anything that could affect your payment. Built for small UK contractors. Not legal advice."
+    "Photograph or upload a construction contract. Get plain-English payment risks under English law. Built for small UK subcontractors and freelancers. Not legal advice."
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en-GB">
-      <body className="bg-[#FAFAF9] text-gray-900 antialiased">{children}</body>
+      <body className="bg-[#F5F4F0] text-gray-900 antialiased">{children}</body>
     </html>
   );
 }
