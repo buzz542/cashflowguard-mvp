@@ -5,6 +5,14 @@ import Anthropic from "@anthropic-ai/sdk";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+async function extractPdfText(buffer: Buffer): Promise<string> {
+  // Import the implementation directly — avoids pdf-parse's broken default test-file path on Vercel
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (b: Buffer) => Promise<{ text: string }>;
+  const data = await pdfParse(buffer);
+  return (data.text || "").trim();
+}
+
 async function extractImageText(buffer: Buffer, mimeType: string): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -21,7 +29,7 @@ async function extractImageText(buffer: Buffer, mimeType: string): Promise<strin
   const base64 = buffer.toString("base64");
 
   const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-5",
     max_tokens: 8000,
     messages: [
       {
@@ -67,7 +75,7 @@ export async function POST(req: NextRequest) {
 
     if (file.size > 12 * 1024 * 1024) {
       return NextResponse.json(
-        { error: "File is too large (max 12MB). Try a clearer photo or a smaller file." },
+        { error: "File is too large (max 12MB). Try a clearer photo or a smaller PDF." },
         { status: 400 }
       );
     }
@@ -103,13 +111,28 @@ export async function POST(req: NextRequest) {
     }
 
     if (name.endsWith(".pdf") || type === "application/pdf") {
-      return NextResponse.json(
-        {
-          error:
-            "PDF upload is temporarily offline. Photograph each page (Take photo) or paste the text."
-        },
-        { status: 400 }
-      );
+      try {
+        const text = await extractPdfText(buffer);
+        if (!text || text.length < 40) {
+          return NextResponse.json(
+            {
+              error:
+                "This PDF has little selectable text (likely a scan). Photograph each page instead."
+            },
+            { status: 400 }
+          );
+        }
+        return NextResponse.json({ text, fileName: file.name });
+      } catch (e: any) {
+        console.error("PDF extract error:", e);
+        return NextResponse.json(
+          {
+            error:
+              "Could not read this PDF. Photograph the pages or paste the text."
+          },
+          { status: 400 }
+        );
+      }
     }
 
     if (type.startsWith("image/") || /\.(jpe?g|png|gif|webp|heic|heif)$/i.test(name)) {
@@ -145,7 +168,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: "Unsupported file. Use a photo, Word (.docx), or paste text." },
+      { error: "Unsupported file. Use a photo, PDF, Word (.docx), or paste text." },
       { status: 400 }
     );
   } catch (error: any) {
