@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280" fill="none">
+  <!-- Interlocking G (black) and C (blue) monogram -->
+  <g transform="translate(50,10)">
+    <!-- G -->
+    <path d="M110 40 C50 40 15 85 15 140 C15 195 50 240 110 240 C145 240 170 225 185 200 L185 155 L115 155 L115 185 L155 185 C148 200 132 210 110 210 C75 210 50 180 50 140 C50 100 75 70 110 70 C132 70 148 80 155 95 L185 80 C170 52 143 40 110 40 Z" fill="#0A0A0A"/>
+    <!-- C overlapping -->
+    <path d="M230 40 C185 40 155 70 145 105 L175 120 C182 95 200 75 230 75 C260 75 280 100 280 140 C280 180 260 205 230 205 C200 205 182 185 175 160 L145 175 C155 210 185 240 230 240 C280 240 315 195 315 140 C315 85 280 40 230 40 Z" fill="#2563EB"/>
+  </g>
+  <text x="200" y="250" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" letter-spacing="6" fill="#0A0A0A">GUARD</text>
+  <text x="200" y="275" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="600" letter-spacing="4" fill="#2563EB">CONSTRUCT</text>
+</svg>
