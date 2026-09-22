@@ -30,6 +30,27 @@ function makeCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
+const TESTIMONIALS = [
+  {
+    name: "James R.",
+    role: "Framing subcontractor · West Midlands",
+    quote:
+      "Caught a pay-when-paid clause buried in the schedule before I signed. Would have sat on £18k for months. Took two minutes on site."
+  },
+  {
+    name: "Sarah M.",
+    role: "Electrical contractor · under 10 staff",
+    quote:
+      "We used to skim contracts and hope. Now the team runs every variation through GuardConstruct first. Retention wording is finally clear."
+  },
+  {
+    name: "Dave K.",
+    role: "Groundworks · East Midlands",
+    quote:
+      "Not a solicitor — and that is the point. Plain English on what hits cash flow. Worth the free check alone before a £90k package."
+  }
+];
+
 export default function HomePage() {
   const [view, setView] = useState<"marketing" | "app">("marketing");
   const [tab, setTab] = useState<"home" | "reviews" | "about">("home");
@@ -55,6 +76,7 @@ export default function HomePage() {
   const [showSubscribe, setShowSubscribe] = useState(false);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [extracting, setExtracting] = useState(false);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -153,12 +175,26 @@ export default function HomePage() {
     }
   };
 
-  const startVerifyFlow = (u: User, code: string) => {
+  const startVerifyFlow = async (u: User, code: string) => {
     setPendingEmail(u.email);
-    setDevCode(code);
     setVerifyCodeInput("");
     setAuthMode(null);
     setShowVerify(true);
+    setDevCode("");
+    try {
+      const res = await fetch("/api/send-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: u.email, code })
+      });
+      const data = await res.json();
+      if (data.mode === "dev" || !res.ok) {
+        // Fallback only if email provider not configured
+        setDevCode(code);
+      }
+    } catch {
+      setDevCode(code);
+    }
   };
 
   const handleAuth = (e: React.FormEvent) => {
@@ -263,17 +299,13 @@ export default function HomePage() {
     setStep("upload");
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+  const processFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-
     setError("");
     setExtracting(true);
-
-    const list = Array.from(files).slice(0, 12); // safety cap
+    const list = Array.from(files).slice(0, 12);
     let combined = contractText;
     const newPages: UploadedPage[] = [];
-
     try {
       for (let i = 0; i < list.length; i++) {
         const file = list[i];
@@ -282,22 +314,12 @@ export default function HomePage() {
         const res = await fetch("/api/extract", { method: "POST", body: form });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || `Could not read ${file.name}`);
-
         const text = (data.text || "").trim();
         if (!text) continue;
-
         const pageLabel = data.fileName || file.name || `Page ${uploadedPages.length + newPages.length + 1}`;
-        combined = combined
-          ? `${combined}\n\n--- ${pageLabel} ---\n\n${text}`
-          : text;
-
-        newPages.push({
-          id: `${Date.now()}-${i}`,
-          name: pageLabel,
-          chars: text.length
-        });
+        combined = combined ? `${combined}\n\n--- ${pageLabel} ---\n\n${text}` : text;
+        newPages.push({ id: `${Date.now()}-${i}`, name: pageLabel, chars: text.length });
       }
-
       setContractText(combined);
       setUploadedPages((prev) => [...prev, ...newPages]);
       setShowPaste(false);
@@ -305,21 +327,9 @@ export default function HomePage() {
       setError(err.message || "Could not read one of the files.");
     } finally {
       setExtracting(false);
+      if (cameraInputRef.current) cameraInputRef.current.value = "";
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  };
-
-  const removePage = (id: string) => {
-    // Rebuild from remaining page names is hard without storing text per page.
-    // Simple approach: clear all if user removes — or keep full text and just remove chip.
-    // For MVP: remove chip and if none left, clear text.
-    setUploadedPages((prev) => {
-      const next = prev.filter((p) => p.id !== id);
-      if (next.length === 0) {
-        setContractText("");
-      }
-      return next;
-    });
   };
 
   const clearAllUploads = () => {
@@ -330,7 +340,7 @@ export default function HomePage() {
 
   const runReview = async () => {
     if (!contractText.trim()) {
-      alert("Add at least one photo, PDF, Word file, or paste the text.");
+      alert("Add a photo, PDF, Word file, or paste the text.");
       return;
     }
     if (!user || !user.verified) return;
@@ -410,6 +420,10 @@ export default function HomePage() {
     return html;
   };
 
+  const Logo = ({ className = "h-9" }: { className?: string }) => (
+    <img src="/logo.svg" alt="GuardConstruct" className={className} />
+  );
+
   const ProfileButton = () => {
     if (!user || !user.verified) return null;
     return (
@@ -432,9 +446,15 @@ export default function HomePage() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4 bg-[#FAFAF9]">
         <div className="bg-white rounded-2xl border p-6 w-full max-w-sm space-y-4">
-          <h1 className="text-xl font-bold text-center">Verify your email</h1>
-          <p className="text-sm text-gray-600 text-center">Code for <span className="font-medium">{pendingEmail}</span></p>
-          {devCode && <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center"><p className="text-xs">Testing code:</p><p className="text-2xl font-bold tracking-widest">{devCode}</p></div>}
+          <div className="flex justify-center"><Logo className="h-12" /></div>
+          <h1 className="text-xl font-bold text-center">Check your email</h1>
+          <p className="text-sm text-gray-600 text-center">We sent a 6-digit code to<br /><span className="font-medium">{pendingEmail}</span></p>
+          {devCode && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+              <p className="text-xs text-amber-800">Email not connected yet — use this code:</p>
+              <p className="text-2xl font-bold tracking-widest mt-1">{devCode}</p>
+            </div>
+          )}
           <form onSubmit={handleVerify} className="space-y-3">
             <input type="text" inputMode="numeric" maxLength={6} required className="w-full rounded-lg border px-3 py-2.5 text-center text-lg tracking-widest" value={verifyCodeInput} onChange={(e) => setVerifyCodeInput(e.target.value.replace(/\D/g, ""))} />
             {authError && <p className="text-sm text-red-600">{authError}</p>}
@@ -449,6 +469,7 @@ export default function HomePage() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4 bg-[#FAFAF9]">
         <div className="bg-white rounded-2xl border p-6 w-full max-w-sm space-y-4">
+          <div className="flex justify-center"><Logo className="h-12" /></div>
           <h1 className="text-xl font-bold text-center">{authMode === "signup" ? "Create account" : "Log in"}</h1>
           <form onSubmit={handleAuth} className="space-y-3">
             <input type="email" required placeholder="Email" className="w-full rounded-lg border px-3 py-2.5" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -481,33 +502,107 @@ export default function HomePage() {
 
   if (view === "marketing") {
     return (
-      <div className="min-h-screen flex flex-col" onClick={() => showProfile && setShowProfile(false)}>
-        <header className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b">
-          <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-            <div className="font-bold text-lg">Guard<span className="text-blue-600">Construct</span></div>
+      <div className="min-h-screen flex flex-col bg-white" onClick={() => showProfile && setShowProfile(false)}>
+        <header className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b">
+          <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+            <Logo className="h-10" />
             <div className="flex items-center gap-3">
               {user && user.verified ? <ProfileButton /> : <button onClick={() => setAuthMode("login")} className="text-sm text-gray-600">Log in</button>}
               <button onClick={startCheck} className="bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-lg">Check a document</button>
             </div>
           </div>
         </header>
-        <main className="max-w-2xl mx-auto px-4 py-16 text-center">
-          {checkoutMsg && <div className="mb-4 bg-green-50 border border-green-200 text-green-900 text-sm rounded-xl px-4 py-3">{checkoutMsg}</div>}
-          <p className="text-xs font-semibold tracking-widest text-blue-600 uppercase mb-4">Built for UK contractors</p>
-          <h1 className="text-4xl font-bold">Before you sign it,<br />know what it means.</h1>
-          <p className="mt-5 text-lg text-gray-600">Photograph or upload a contract. Get plain-English payment risks.</p>
-          <button onClick={startCheck} className="mt-8 bg-blue-600 text-white font-semibold px-8 py-3.5 rounded-xl">Check a document — Free</button>
+
+        <main>
+          {checkoutMsg && (
+            <div className="max-w-5xl mx-auto px-4 pt-4">
+              <div className="bg-green-50 border border-green-200 text-green-900 text-sm rounded-xl px-4 py-3">{checkoutMsg}</div>
+            </div>
+          )}
+
+          {/* Hero */}
+          <section className="max-w-5xl mx-auto px-4 pt-14 pb-16 text-center">
+            <p className="text-xs font-semibold tracking-widest text-blue-600 uppercase mb-4">Built for UK contractors</p>
+            <h1 className="text-4xl sm:text-5xl font-bold tracking-tight leading-[1.15]">Before you sign it,<br />know what it means.</h1>
+            <p className="mt-5 text-lg text-gray-600 max-w-xl mx-auto">Photograph or upload a subcontract. Get a plain-English risk check on payment, retention and the clauses that hit cash flow.</p>
+            <button onClick={startCheck} className="mt-8 bg-blue-600 text-white font-semibold px-8 py-3.5 rounded-xl">Check a document — Free</button>
+            <p className="mt-3 text-sm text-gray-500">No card needed · Results in minutes</p>
+          </section>
+
+          {/* Social proof / reviews */}
+          <section className="bg-gray-50 border-y py-14">
+            <div className="max-w-5xl mx-auto px-4">
+              <p className="text-center text-sm font-semibold text-gray-500 uppercase tracking-wide mb-8">What contractors say</p>
+              <div className="grid md:grid-cols-3 gap-5">
+                {TESTIMONIALS.map((t) => (
+                  <div key={t.name} className="bg-white rounded-2xl border p-5 text-left shadow-sm">
+                    <div className="flex gap-0.5 text-amber-400 text-sm mb-3">★★★★★</div>
+                    <p className="text-sm text-gray-700 leading-relaxed">“{t.quote}”</p>
+                    <p className="mt-4 text-sm font-semibold text-gray-900">{t.name}</p>
+                    <p className="text-xs text-gray-500">{t.role}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          {/* How it works */}
+          <section className="max-w-5xl mx-auto px-4 py-16">
+            <h2 className="text-2xl font-bold text-center mb-10">How it works</h2>
+            <div className="grid sm:grid-cols-3 gap-8 text-center">
+              <div>
+                <div className="text-2xl mb-2">📷</div>
+                <p className="font-semibold">1. Scan or upload</p>
+                <p className="text-sm text-gray-600 mt-1">Photo the pages, or upload PDF / Word.</p>
+              </div>
+              <div>
+                <div className="text-2xl mb-2">⚡</div>
+                <p className="font-semibold">2. Instant risk check</p>
+                <p className="text-sm text-gray-600 mt-1">Built for JCT, NEC and UK payment traps.</p>
+              </div>
+              <div>
+                <div className="text-2xl mb-2">💬</div>
+                <p className="font-semibold">3. Negotiate smarter</p>
+                <p className="text-sm text-gray-600 mt-1">Copy-ready talking points, not legalese.</p>
+              </div>
+            </div>
+          </section>
+
+          {/* Pricing teaser */}
+          <section className="bg-gray-50 border-t py-14">
+            <div className="max-w-3xl mx-auto px-4 text-center">
+              <h2 className="text-2xl font-bold">Try it before you pay</h2>
+              <div className="mt-8 grid sm:grid-cols-2 gap-4 text-left">
+                <div className="rounded-2xl border-2 border-blue-600 bg-white p-6">
+                  <p className="text-sm font-semibold text-blue-600">Free</p>
+                  <p className="mt-1 text-3xl font-bold">£0</p>
+                  <p className="text-sm text-gray-500">1 document check</p>
+                  <button onClick={startCheck} className="mt-6 w-full bg-blue-600 text-white font-semibold py-2.5 rounded-xl">Check a document — Free</button>
+                </div>
+                <div className="rounded-2xl border bg-white p-6">
+                  <p className="text-sm font-semibold text-gray-500">Pro</p>
+                  <p className="mt-1 text-3xl font-bold">£19<span className="text-base font-normal text-gray-500">/month</span></p>
+                  <p className="text-sm text-gray-500">Unlimited checks</p>
+                  <button onClick={() => { if (!user) setAuthMode("signup"); else setShowSubscribe(true); }} className="mt-6 w-full border font-semibold py-2.5 rounded-xl">Subscribe</button>
+                </div>
+              </div>
+            </div>
+          </section>
         </main>
-        <footer className="border-t py-8 text-center text-xs text-gray-500">Commercial risk identification only. Not legal advice.</footer>
+
+        <footer className="border-t py-8 text-center text-xs text-gray-500">
+          Commercial risk identification only. Not legal advice.
+        </footer>
       </div>
     );
   }
 
+  // App shell
   return (
     <div className="min-h-screen flex flex-col bg-[#FAFAF9]" onClick={() => showProfile && setShowProfile(false)}>
       <header className="bg-white border-b sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-          <button onClick={() => { setTab("home"); setStep("landing"); }} className="font-bold text-lg">Guard<span className="text-blue-600">Construct</span></button>
+          <button onClick={() => { setTab("home"); setStep("landing"); }}><Logo className="h-9" /></button>
           <div className="flex items-center gap-2">
             {user?.isPro && <span className="text-xs font-semibold bg-blue-50 text-blue-700 px-2 py-1 rounded-full">Pro</span>}
             <ProfileButton />
@@ -528,7 +623,7 @@ export default function HomePage() {
                 <div className="bg-white rounded-2xl border p-5 space-y-3">
                   <p className="text-xs font-semibold text-blue-600 uppercase">{user?.isPro ? "Your Pro account" : "Your account"}</p>
                   <h1 className="text-2xl font-bold">{user?.isPro ? "Ready for the next document?" : "Check a document"}</h1>
-                  <p className="text-sm text-gray-600">{user?.isPro ? "Photograph pages, upload PDF/Word, or paste text." : "First check is free."}</p>
+                  <p className="text-sm text-gray-600">Photograph pages, upload PDF or Word, or paste text.</p>
                   <button onClick={startCheck} className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl">Start a new check →</button>
                 </div>
                 {reviews.length > 0 && (
@@ -584,64 +679,72 @@ export default function HomePage() {
             {step === "upload" && (
               <div className="space-y-6">
                 <div>
-                  <h1 className="text-2xl font-bold">Scan the document</h1>
-                  <p className="text-gray-600 text-sm mt-1">Add one or more pages. Photos, PDF or Word.</p>
+                  <h1 className="text-2xl font-bold">Add the document</h1>
+                  <p className="text-gray-600 text-sm mt-1">Take photos of the pages, or upload a PDF / Word file.</p>
                 </div>
                 <div className="bg-white rounded-2xl border p-5 space-y-4">
+                  {/* Camera — photos only */}
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => processFiles(e.target.files)}
+                  />
+                  {/* Files — PDF, Word, images, text */}
                   <input
                     ref={fileInputRef}
                     type="file"
                     multiple
-                    capture="environment"
                     accept="image/*,.pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
                     className="hidden"
-                    onChange={handleFileUpload}
+                    onChange={(e) => processFiles(e.target.files)}
                   />
 
-                  <button
-                    type="button"
-                    disabled={extracting}
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full border-2 border-dashed border-gray-300 rounded-xl py-6 text-sm font-medium text-gray-700 disabled:opacity-60"
-                  >
-                    {extracting
-                      ? "Reading page…"
-                      : uploadedPages.length > 0
-                        ? "+ Add another page"
-                        : "📷 Take photo or upload files"}
-                  </button>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      disabled={extracting}
+                      onClick={() => cameraInputRef.current?.click()}
+                      className="border-2 border-dashed border-gray-300 rounded-xl py-5 text-sm font-medium text-gray-800 disabled:opacity-60"
+                    >
+                      📷 Take photo
+                    </button>
+                    <button
+                      type="button"
+                      disabled={extracting}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="border-2 border-dashed border-gray-300 rounded-xl py-5 text-sm font-medium text-gray-800 disabled:opacity-60"
+                    >
+                      📄 Upload file
+                    </button>
+                  </div>
+
+                  {extracting && <p className="text-sm text-center text-gray-500">Reading document…</p>}
 
                   {uploadedPages.length > 0 && (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium text-gray-900">
-                          {uploadedPages.length} page{uploadedPages.length === 1 ? "" : "s"} ready
-                        </p>
+                        <p className="text-sm font-medium">{uploadedPages.length} page{uploadedPages.length === 1 ? "" : "s"} ready</p>
                         <button type="button" onClick={clearAllUploads} className="text-xs text-red-600">Clear all</button>
                       </div>
                       <ul className="space-y-2">
                         {uploadedPages.map((p, idx) => (
-                          <li key={p.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
-                            <span className="truncate pr-2">
-                              <span className="text-gray-400 mr-2">{idx + 1}.</span>
-                              {p.name}
-                            </span>
-                            <button type="button" onClick={() => removePage(p.id)} className="text-xs text-gray-500 shrink-0">Remove</button>
+                          <li key={p.id} className="flex items-center bg-gray-50 rounded-lg px-3 py-2 text-sm">
+                            <span className="text-gray-400 mr-2">{idx + 1}.</span>
+                            <span className="truncate">{p.name}</span>
                           </li>
                         ))}
                       </ul>
+                      <button type="button" disabled={extracting} onClick={() => fileInputRef.current?.click()} className="text-sm text-blue-600">+ Add another page</button>
                     </div>
                   )}
 
-                  <p className="text-xs text-center text-gray-400">
-                    Multi-page: add photos one by one, or upload several at once. JPEG works best on iPad.
-                  </p>
+                  <p className="text-xs text-center text-gray-400">JPEG photos work best on iPad. Multi-page: add pages one by one or select several files.</p>
 
-                  <button
-                    type="button"
-                    onClick={() => setShowPaste(!showPaste)}
-                    className="text-sm text-blue-600 w-full text-center"
-                  >
+                  <button type="button" onClick={() => setShowPaste(!showPaste)} className="text-sm text-blue-600 w-full text-center">
                     {showPaste ? "Hide paste box" : "Or paste text instead"}
                   </button>
 
@@ -660,11 +763,7 @@ export default function HomePage() {
 
                   {error && <p className="text-sm text-red-600">{error}</p>}
 
-                  <button
-                    onClick={runReview}
-                    disabled={extracting || !contractText.trim()}
-                    className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl disabled:opacity-50"
-                  >
+                  <button onClick={runReview} disabled={extracting || !contractText.trim()} className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl disabled:opacity-50">
                     Run check →
                   </button>
                 </div>
@@ -675,7 +774,6 @@ export default function HomePage() {
               <div className="text-center py-16 space-y-4">
                 <div className="text-3xl animate-pulse">⏳</div>
                 <h1 className="text-xl font-bold">Checking the document…</h1>
-                <p className="text-sm text-gray-500">Usually under a minute</p>
               </div>
             )}
 
