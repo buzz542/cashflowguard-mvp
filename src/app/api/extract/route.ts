@@ -6,9 +6,9 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 async function extractPdfText(buffer: Buffer): Promise<string> {
-  // Import the implementation directly — avoids pdf-parse's broken default test-file path on Vercel
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (b: Buffer) => Promise<{ text: string }>;
+  // Dynamic import keeps pdf-parse out of the client bundle
+  const mod: any = await import("pdf-parse");
+  const pdfParse = mod.default || mod;
   const data = await pdfParse(buffer);
   return (data.text || "").trim();
 }
@@ -29,7 +29,7 @@ async function extractImageText(buffer: Buffer, mimeType: string): Promise<strin
   const base64 = buffer.toString("base64");
 
   const message = await anthropic.messages.create({
-    model: "claude-sonnet-5",
+    model: "claude-sonnet-4-20250514",
     max_tokens: 8000,
     messages: [
       {
