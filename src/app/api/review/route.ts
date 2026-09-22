@@ -106,7 +106,7 @@ DOCUMENT TO REVIEW:
 ${contractText.slice(0, 100000)}`;
 
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-5",
       max_tokens: 4500,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userMessage }]
@@ -132,9 +132,11 @@ ${contractText.slice(0, 100000)}`;
     return NextResponse.json({ result });
   } catch (error: any) {
     console.error("Review error:", error);
-    return NextResponse.json(
-      { error: error.message || "Review failed" },
-      { status: 500 }
-    );
+    // Surface Anthropic API errors clearly to the client
+    const msg =
+      error?.error?.message ||
+      error?.message ||
+      "Review failed";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
