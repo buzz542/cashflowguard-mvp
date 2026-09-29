@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -10,7 +10,6 @@ function CopyButton({ text }: { text: string }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // fallback
       const ta = document.createElement("textarea");
       ta.value = text;
       document.body.appendChild(ta);
@@ -35,14 +34,13 @@ function CopyButton({ text }: { text: string }) {
 /** Render review markdown with copy buttons on suggested-wording blockquotes */
 export default function ReviewResults({ result }: { result: string }) {
   const lines = result.split("\n");
-  const nodes: React.ReactNode[] = [];
+  const nodes: ReactNode[] = [];
   let i = 0;
   let key = 0;
 
   while (i < lines.length) {
     const line = lines[i];
 
-    // Suggested wording label + following blockquote(s)
     if (/^\*\*Suggested wording:\*\*/i.test(line) || /^Suggested wording:/i.test(line)) {
       nodes.push(
         <p key={key++} className="font-semibold text-gray-900 mt-3 mb-1">
@@ -74,7 +72,6 @@ export default function ReviewResults({ result }: { result: string }) {
       continue;
     }
 
-    // Headings
     if (line.startsWith("### ")) {
       nodes.push(
         <h3 key={key++} className="text-base font-bold text-gray-900 mt-5 mb-2">
@@ -94,14 +91,12 @@ export default function ReviewResults({ result }: { result: string }) {
       continue;
     }
 
-    // Horizontal rule
     if (/^---+$/.test(line.trim())) {
       nodes.push(<hr key={key++} className="my-4 border-gray-200" />);
       i++;
       continue;
     }
 
-    // Bold label lines like **Clause / reference:**
     const boldLabel = line.match(/^\*\*(.+?)\*\*\s*(.*)$/);
     if (boldLabel) {
       nodes.push(
@@ -114,7 +109,6 @@ export default function ReviewResults({ result }: { result: string }) {
       continue;
     }
 
-    // Blockquote without label
     if (line.startsWith(">")) {
       const quoteLines: string[] = [];
       while (i < lines.length && lines[i].startsWith(">")) {
@@ -134,14 +128,12 @@ export default function ReviewResults({ result }: { result: string }) {
       continue;
     }
 
-    // Empty line
     if (line.trim() === "") {
       nodes.push(<div key={key++} className="h-2" />);
       i++;
       continue;
     }
 
-    // Bullet
     if (/^[-*]\s/.test(line)) {
       nodes.push(
         <p key={key++} className="text-sm text-gray-800 leading-relaxed pl-1">
@@ -152,7 +144,6 @@ export default function ReviewResults({ result }: { result: string }) {
       continue;
     }
 
-    // Numbered
     if (/^\d+\.\s/.test(line)) {
       nodes.push(
         <p key={key++} className="text-sm text-gray-800 leading-relaxed">
