@@ -37,7 +37,7 @@ npm run build
 ## Setting up a new environment
 
 1. **Supabase**: create a project (pick a UK/EU region and note it in the privacy policy). Run each file in
-   `supabase/migrations/` in order in the SQL editor. Under Authentication:
+   `supabase/migrations/` in order (0001 → 0005) in the SQL editor. Under Authentication:
    - keep **Confirm email** on
    - set the Site URL to your domain and add `https://<domain>/auth/callback` to the redirect allow-list
    - configure custom SMTP for auth emails (Supabase's built-in sender is rate-limited and not for production)

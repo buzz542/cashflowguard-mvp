@@ -135,6 +135,19 @@ export function TeamView({
                 <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 ${m.hasSeat ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-600"}`}>
                   {m.hasSeat ? "Pro seat" : "No seat"}
                 </span>
+                {isOwner && m.role !== "owner" && (
+                  <button type="button" disabled={busy} className="text-xs text-blue-600"
+                    onClick={() => {
+                      if (!confirm(`Make ${m.name} the owner of ${ws.name}? You'll stay in the team as a member.`)) return;
+                      void act(async () => {
+                        await call(`/api/workspaces/${ws.id}/transfer`, { method: "POST", body: JSON.stringify({ userId: m.userId }) });
+                        await onChanged();
+                        await load();
+                      });
+                    }}>
+                    Make owner
+                  </button>
+                )}
                 {m.role !== "owner" && (isOwner || m.userId === me.user?.id) && (
                   <button type="button" disabled={busy} className="text-xs text-red-600"
                     onClick={() => {
@@ -236,6 +249,21 @@ export function TeamView({
         <button type="button" className="text-sm text-blue-600" disabled={busy} onClick={() => act(() => onSwitch(personal.id))}>
           Switch to my personal workspace
         </button>
+      )}
+      {isOwner && (
+        <div className="border-t pt-4">
+          <button type="button" disabled={busy} className="text-sm text-red-600"
+            onClick={() => {
+              const typed = window.prompt(`This deletes ${ws.name} and all its reviews and tracked deadlines for everyone in it. Type the team name to confirm.`);
+              if (typed !== ws.name) return;
+              void act(async () => {
+                await call(`/api/workspaces/${ws.id}`, { method: "DELETE", body: JSON.stringify({ confirm: typed }) });
+                if (personal) await onSwitch(personal.id);
+              });
+            }}>
+            Delete this team
+          </button>
+        </div>
       )}
       {error && <p className="text-sm text-red-600">{error}</p>}
     </div>

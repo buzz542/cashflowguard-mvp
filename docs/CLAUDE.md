@@ -120,8 +120,9 @@ supabase/
   migrations/0002_deadline_reminders.sql
   migrations/0003_team_seats.sql
   migrations/0004_ocr_cap_and_minimisation.sql
+  migrations/0005_team_transfer.sql
   tests/auth_shim.sql         Fake auth schema + roles for local Postgres
-  tests/0001_rls_test.sql, tests/0002_reminders_test.sql, tests/0003_teams_test.sql, tests/0004_ocr_test.sql, tests/0005_account_deletion_test.sql
+  tests/0001_rls_test.sql, tests/0002_reminders_test.sql, tests/0003_teams_test.sql, tests/0004_ocr_test.sql, tests/0005_account_deletion_test.sql, tests/0006_team_transfer_test.sql
 vercel.json                   Daily cron for /api/cron/reminders
 scripts/test-db.sh
 tests/*.test.ts
@@ -233,7 +234,7 @@ Files are processed in memory and never persisted. The client continues past a f
 10. **Extraction quality is unmeasured.** Tests cover shape and safety, not recall/precision on real contracts. Build an eval before relying on it in marketing.
 11. **Pro reviews cost roughly twice as much in input tokens** (review + extraction both send the full contract).
 12. **One cron run a day.** A deadline confirmed after 06:00 UTC gets its first email the next day. The in-app list is always current.
-13. **No ownership transfer or team deletion** in the app.
+13. ~~**No ownership transfer or team deletion**~~ Fixed: `transfer_workspace()` + `api/workspaces/[id]/transfer`, `DELETE api/workspaces/[id]`; both refuse while a subscription is active.
 
 ## Note on this file's location
 

@@ -132,7 +132,7 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 - ~~Refresh/back mid-flow loses the check in progress.~~ Fixed: the draft is kept per tab and restored; a reload mid-check goes to past reviews instead of re-running.
 - Email confirmation is now required before the first free check: more friction between landing and first value.
 - **Deadline extraction has not been measured against real contracts.** It's tested for shape and safety (bad output is dropped, not guessed), not for how often it finds the right deadlines. Needs an eval on a set of real JCT/NEC/bespoke subcontracts before it's marketed hard.
-- Team owners can't transfer ownership or delete a team from the app (support request needed).
+- ~~Team owners can't transfer ownership or delete a team.~~ Fixed: "Make owner" and "Delete this team" in team settings (both need the team plan cancelled first).
 - A removed member's reviews stay with the team (work product belongs to the firm). Confirm that's what customers expect.
 - Reminders run once a day (06:00 UTC); a deadline confirmed after that run gets its first email the next morning.
 - Deadlines that run from an event (instruction, completion) have no date, and so no reminder, until the user enters the event date.
