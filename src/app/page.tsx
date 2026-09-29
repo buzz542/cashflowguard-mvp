@@ -31,6 +31,44 @@ export default function HomePage() {
     } catch {}
   }, []);
 
+  // After Stripe Checkout: unlock Pro when payment succeeds
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("checkout") !== "success") return;
+    const sessionId = params.get("session_id");
+    if (!sessionId) return;
+
+    (async () => {
+      try {
+        const res = await fetch("/api/checkout/verify?session_id=" + encodeURIComponent(sessionId));
+        const data = await res.json();
+        if (!res.ok || !data.paid) return;
+
+        let base: User | null = null;
+        try {
+          const s = localStorage.getItem("gc_user");
+          if (s) base = JSON.parse(s);
+        } catch {}
+        if (!base && data.customer_email) {
+          const stored = localStorage.getItem("gc_user_" + String(data.customer_email).toLowerCase());
+          if (stored) base = JSON.parse(stored);
+        }
+        if (!base) return;
+
+        const upgraded: User = { ...base, isPro: true, freeUsed: false };
+        setUser(upgraded);
+        localStorage.setItem("gc_user", JSON.stringify(upgraded));
+        localStorage.setItem("gc_user_" + upgraded.email, JSON.stringify(upgraded));
+        setView("app");
+        setStep("landing");
+        window.history.replaceState({}, "", window.location.pathname);
+      } catch (e) {
+        console.error("Checkout verify failed", e);
+      }
+    })();
+  }, []);
+
   const saveUser = (u: User) => {
     setUser(u);
     localStorage.setItem("gc_user", JSON.stringify(u));
