@@ -127,7 +127,7 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 - ~~Founder email logs in with any password client-side.~~ Fixed in Phase 0.
 - ~~Cancelled Pro users still see "Pro".~~ Fixed in Phase 1 (webhook + server-side entitlement).
 - ~~Free tier resettable by clearing the browser or using a new email alias.~~ Fixed in Phase 1.
-- Photos/PDFs over ~4.5MB likely fail on Vercel despite the "max 12MB" message. The client now shows a clear "too large" error for a 413, but the limit itself is unchanged.
+- ~~Photos/PDFs over ~4.5MB fail on Vercel.~~ Fixed: photos are shrunk in the browser to 1568px JPEG before upload (a 23MB photo uploads as ~1MB); other files over 4MB get a clear message before upload.
 - Scanned PDFs are rejected instead of OCR'd.
 - Refresh/back mid-flow loses the check in progress (saved reviews are safe).
 - Email confirmation is now required before the first free check: more friction between landing and first value.

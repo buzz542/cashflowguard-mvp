@@ -80,9 +80,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
 
-    if (file.size > 12 * 1024 * 1024) {
+    // The browser shrinks photos first; Vercel rejects bodies over ~4.5MB before we get here anyway.
+    if (file.size > 4.5 * 1024 * 1024) {
       return NextResponse.json(
-        { error: "File is too large (max 12MB). Try a clearer photo or a smaller PDF." },
+        { error: "File is too large (max 4MB). Split it, photograph the pages, or paste the text." },
         { status: 400 }
       );
     }

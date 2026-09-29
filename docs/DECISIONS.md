@@ -29,3 +29,4 @@ Product and technical choices made without asking, per the instruction to pick t
 | Decision | Choice | Why |
 |---|---|---|
 | Linting | `next lint` with `next/core-web-vitals` (ESLint 8, matching Next 14) | Standard for this stack; no config existed |
+| Large uploads | Shrink photos in the browser to 1568px long edge, JPEG (quality 0.85, falling back to 0.7/0.5); refuse other files over 4MB up front | Claude downsizes to ~1568px anyway; avoids new storage infrastructure for direct uploads |

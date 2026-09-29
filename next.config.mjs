@@ -10,9 +10,6 @@ const supabaseOrigin = (() => {
 
 const nextConfig = {
   experimental: {
-    serverActions: {
-      bodySizeLimit: "12mb"
-    },
     serverComponentsExternalPackages: ["pdf-parse", "mammoth"]
   },
   async headers() {

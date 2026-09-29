@@ -220,7 +220,7 @@ Files are processed in memory and never persisted. The client continues past a f
 
 ## Known gaps (still open)
 
-1. **Vercel request body limit (~4.5MB)**: large photos/PDFs fail before reaching `/api/extract`. The client reports a 413 clearly now, but the fix (client-side image downscaling or direct-to-storage upload) isn't built.
+1. ~~**Vercel request body limit**~~ Fixed: `lib/uploadPrep.ts` shrinks photos in the browser; non-image files over 4MB are refused client-side with a clear message.
 2. **Timeouts**: review is non-streaming with `max_tokens: 8000` under `maxDuration: 60`. Long contracts could exceed it.
 3. **Scanned PDFs** rejected rather than OCR'd.
 4. **In-memory rate limits** (per-user hourly, extract) reset on cold start. The free tier itself is durable.

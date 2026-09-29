@@ -9,6 +9,7 @@ import { AuthModal, TermsGate } from "./AuthModal";
 import { DeadlinesPanel, DeadlinesView } from "./DeadlinesPanel";
 import { TeamView } from "./TeamPanel";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
+import { prepareUpload } from "@/lib/uploadPrep";
 import type { Me, ReviewSummary, ApiError, ObligationRow, JobRow, TeamInfo } from "@/lib/clientTypes";
 
 type Step = "landing" | "context" | "upload" | "loading" | "results" | "history" | "deadlines" | "team";
@@ -412,7 +413,7 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
     for (const file of Array.from(files).slice(0, 12)) {
       try {
         const form = new FormData();
-        form.append("file", file);
+        form.append("file", await prepareUpload(file));
         const res = await fetch("/api/extract", { method: "POST", body: form });
         if (res.status === 413) throw new Error("File is too large to upload. Try a smaller photo or PDF.");
         const data = await readJson<{ text: string; fileName: string }>(res);
