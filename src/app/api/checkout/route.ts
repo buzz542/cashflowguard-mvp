@@ -22,12 +22,13 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const email = typeof body.email === "string" ? body.email : undefined;
 
-    const stripe = new Stripe(secret, { apiVersion: "2024-11-20.acacia" as any });
+    // Let the Stripe SDK pick a supported API version (avoids outdated acacia pin warnings)
+    const stripe = new Stripe(secret);
 
     const origin =
       req.headers.get("origin") ||
       process.env.NEXT_PUBLIC_APP_URL ||
-      "https://cashflowguard-mvp.vercel.app";
+      "https://guardconstruct.com";
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
@@ -36,13 +37,11 @@ export async function POST(req: NextRequest) {
       cancel_url: `${origin}/?checkout=cancel`,
       customer_email: email || undefined,
       allow_promotion_codes: true,
-      // Avoid Managed Payments tax_code requirements during test setup
-      managed_payments: { enabled: false },
       metadata: {
         app: "guardconstruct",
         plan: "pro"
       }
-    } as any);
+    });
 
     if (!session.url) {
       return NextResponse.json({ error: "No checkout URL returned" }, { status: 500 });
