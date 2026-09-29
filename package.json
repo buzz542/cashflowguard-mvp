@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:db": "./scripts/test-db.sh",
     "lint": "next lint",
-    "check": "npm run -s lint && npm run -s typecheck && npm test -s && npm run -s test:db && npm run -s build"
+    "check": "npm run -s lint && npm run -s typecheck && npm test -s && npm run -s test:db && npm run -s build",
+    "eval:extraction": "vitest run --config vitest.eval.config.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.129.0",

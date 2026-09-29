@@ -30,6 +30,9 @@ npm run typecheck
 npm test            # vitest, tests/*.test.ts
 npm run test:db     # migrations + supabase/tests/*_test.sql on a throwaway Postgres
 npm run build
+npm run lint
+npm run check            # all of the above
+npm run eval:extraction  # real API, needs ANTHROPIC_API_KEY
 ```
 
 Run all four before pushing. `test:db` needs local Postgres 15+ binaries (not Supabase). Under root it uses `su postgres`.
@@ -231,7 +234,7 @@ Files are processed in memory and never persisted. The client continues past a f
 7. ~~**Account deletion** by email only~~ Fixed: account menu → Delete my account (`api/me/delete`). Blocked while the user has an active subscription or owns a team with other members; team deadlines are re-routed first; the free-tier ledger is kept.
 8. **Supabase auth emails** need custom SMTP in production; the default sender is heavily rate-limited.
 9. Git history shows many wholesale "Restore page" overwrites of the old `page.tsx`. Keep edits to `HomeClient.tsx` surgical.
-10. **Extraction quality is unmeasured.** Tests cover shape and safety, not recall/precision on real contracts. Build an eval before relying on it in marketing.
+10. **Extraction quality not yet measured.** `npm run eval:extraction` (evals/, `lib/evalScore.ts`) runs the fixtures against the real API; needs a key. Add real anonymised contracts to `evals/extractionFixtures.ts`.
 11. **Pro reviews cost roughly twice as much in input tokens** (review + extraction both send the full contract).
 12. **One cron run a day.** A deadline confirmed after 06:00 UTC gets its first email the next day. The in-app list is always current.
 13. ~~**No ownership transfer or team deletion**~~ Fixed: `transfer_workspace()` + `api/workspaces/[id]/transfer`, `DELETE api/workspaces/[id]`; both refuse while a subscription is active.

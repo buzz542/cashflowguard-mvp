@@ -131,7 +131,7 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 - ~~Scanned PDFs are rejected instead of OCR'd.~~ Fixed: read by Claude (up to 20 pages per file).
 - ~~Refresh/back mid-flow loses the check in progress.~~ Fixed: the draft is kept per tab and restored; a reload mid-check goes to past reviews instead of re-running.
 - Email confirmation is now required before the first free check: more friction between landing and first value.
-- **Deadline extraction has not been measured against real contracts.** It's tested for shape and safety (bad output is dropped, not guessed), not for how often it finds the right deadlines. Needs an eval on a set of real JCT/NEC/bespoke subcontracts before it's marketed hard.
+- **Deadline extraction has not been measured yet.** The harness exists (`npm run eval:extraction`: 5 hand-written JCT/NEC-style excerpts, pass bar 80% recall / 70% precision) but needs `ANTHROPIC_API_KEY` to run, and real anonymised contracts to be meaningful.
 - ~~Team owners can't transfer ownership or delete a team.~~ Fixed: "Make owner" and "Delete this team" in team settings (both need the team plan cancelled first).
 - A removed member's reviews stay with the team (work product belongs to the firm). Confirm that's what customers expect.
 - Reminders run once a day (06:00 UTC); a deadline confirmed after that run gets its first email the next morning.
