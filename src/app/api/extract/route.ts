@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import mammoth from "mammoth";
 import Anthropic from "@anthropic-ai/sdk";
 
+export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
