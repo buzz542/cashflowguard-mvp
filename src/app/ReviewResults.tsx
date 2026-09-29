@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { parseReview, boldSegments } from "@/lib/reviewMarkdown";
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -23,100 +24,53 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+function Inline({ text }: { text: string }) {
+  return (
+    <>
+      {boldSegments(text).map((seg, i) => (seg.bold ? <strong key={i}>{seg.text}</strong> : <span key={i}>{seg.text}</span>))}
+    </>
+  );
+}
+
 /** Render review markdown with copy buttons on suggested-wording blockquotes */
 export default function ReviewResults({ result }: { result: string }) {
-  const lines = result.split("\n");
-  const nodes: ReactNode[] = [];
-  let i = 0;
-  let key = 0;
-
-  while (i < lines.length) {
-    const line = lines[i];
-
-    if (/^\*\*Suggested wording:\*\*/i.test(line) || /^Suggested wording:/i.test(line)) {
-      nodes.push(
-        <p key={key++} className="font-semibold text-gray-900 mt-3 mb-1">
-          Suggested wording
-        </p>
-      );
-      i++;
-      const quoteLines: string[] = [];
-      while (i < lines.length && (lines[i].startsWith(">") || lines[i].trim() === "")) {
-        if (lines[i].startsWith(">")) {
-          quoteLines.push(lines[i].replace(/^>\s?/, ""));
-        } else if (quoteLines.length) {
-          break;
-        }
-        i++;
-      }
-      const quote = quoteLines.join("\n").trim();
-      if (quote) {
-        nodes.push(
-          <div
-            key={key++}
-            className="bg-blue-50 border border-blue-100 rounded-xl p-3 my-2 flex gap-2 items-start"
-          >
-            <p className="text-sm text-gray-800 flex-1 whitespace-pre-wrap leading-relaxed">{quote}</p>
-            <CopyButton text={quote} />
-          </div>
+  const nodes: ReactNode[] = parseReview(result).map((b, key) => {
+    switch (b.type) {
+      case "h2":
+        return <h2 key={key} className="text-lg font-bold text-gray-900 mt-6 mb-2">{b.text}</h2>;
+      case "h3":
+        return <h3 key={key} className="text-base font-bold text-gray-900 mt-5 mb-2">{b.text}</h3>;
+      case "hr":
+        return <hr key={key} className="my-4 border-gray-200" />;
+      case "ul":
+      case "ol": {
+        const List = b.type;
+        return (
+          <List key={key} className={`${b.type === "ul" ? "list-disc" : "list-decimal"} pl-5 space-y-1 my-2 text-sm text-gray-800 leading-relaxed`}>
+            {b.items.map((it, j) => (
+              <li key={j}><Inline text={it} /></li>
+            ))}
+          </List>
         );
       }
-      continue;
+      case "wording":
+        return (
+          <div key={key}>
+            <p className="font-semibold text-gray-900 mt-3 mb-1">Suggested wording</p>
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 my-2 flex gap-2 items-start">
+              <p className="text-sm text-gray-800 flex-1 whitespace-pre-wrap leading-relaxed">{b.text}</p>
+              <CopyButton text={b.text} />
+            </div>
+          </div>
+        );
+      default:
+        return (
+          <p key={key} className="text-sm text-gray-800 leading-relaxed my-1 whitespace-pre-wrap">
+            <Inline text={b.text} />
+          </p>
+        );
     }
-
-    if (line.startsWith("### ")) {
-      nodes.push(
-        <h3 key={key++} className="text-base font-bold text-gray-900 mt-5 mb-2">
-          {line.replace(/^###\s*/, "")}
-        </h3>
-      );
-      i++;
-      continue;
-    }
-
-    if (line.startsWith("## ")) {
-      nodes.push(
-        <h2 key={key++} className="text-lg font-bold text-gray-900 mt-6 mb-2">
-          {line.replace(/^##\s*/, "")}
-        </h2>
-      );
-      i++;
-      continue;
-    }
-
-    if (line.startsWith("---")) {
-      nodes.push(<hr key={key++} className="my-4 border-gray-200" />);
-      i++;
-      continue;
-    }
-
-    if (line.trim() === "") {
-      i++;
-      continue;
-    }
-
-    if (/\*\*(.+?)\*\*/.test(line)) {
-      const parts = line.split(/(\*\*.+?\*\*)/g);
-      nodes.push(
-        <p key={key++} className="text-sm text-gray-800 leading-relaxed my-1">
-          {parts.map((part, idx) =>
-            part.startsWith("**") && part.endsWith("**") ? (
-              <strong key={idx}>{part.slice(2, -2)}</strong>
-            ) : (
-              <span key={idx}>{part}</span>
-            )
-          )}
-        </p>
-      );
-    } else {
-      nodes.push(
-        <p key={key++} className="text-sm text-gray-800 leading-relaxed my-1 whitespace-pre-wrap">
-          {line}
-        </p>
-      );
-    }
-    i++;
-  }
+  });
 
   return (
     <div className="space-y-1">

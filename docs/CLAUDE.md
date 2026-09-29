@@ -64,7 +64,7 @@ src/
     DeadlinesPanel.tsx        Extracted deadlines under a review + the all-deadlines view (+ assignee select)
     TeamPanel.tsx             Create team / members + seats / invites / buy seats
     ProfileMenu.tsx           Avatar dropdown (+ reminder email toggle)
-    ReviewResults.tsx         Markdown renderer + copy buttons on suggested wording
+    ReviewResults.tsx         Renders lib/reviewMarkdown blocks + copy buttons on suggested wording
     auth/callback/route.ts    Magic link / email confirmation landing (PKCE code or token_hash)
     privacy/, terms/          Legal pages
     api/
@@ -225,7 +225,7 @@ Files are processed in memory and never persisted. The client continues past a f
 3. ~~**Scanned PDFs** rejected~~ Fixed: transcribed by Claude.
 4. **In-memory rate limits** (per-user hourly, extract) reset on cold start. The free tier itself is durable.
 5. ~~**Refresh loses a check in progress**~~ Fixed: `lib/draft.ts` keeps the draft in sessionStorage (cleared on logout and when the tab closes).
-6. **Markdown renderer** doesn't render lists/links/tables as such.
+6. ~~**Markdown renderer** doesn't render lists~~ Fixed: `lib/reviewMarkdown.ts` parses headings, lists, bold, rules and suggested wording (no links/HTML, by design).
 7. **Account deletion** is by email request (privacy policy). No self-service button.
 8. **Supabase auth emails** need custom SMTP in production; the default sender is heavily rate-limited.
 9. Git history shows many wholesale "Restore page" overwrites of the old `page.tsx`. Keep edits to `HomeClient.tsx` surgical.
