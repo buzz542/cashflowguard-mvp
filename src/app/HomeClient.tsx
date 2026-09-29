@@ -694,7 +694,7 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
         </section>
 
         <section className="border-y bg-[#FAFAF9] py-10">
-          <p className="text-center text-xs font-semibold tracking-[0.15em] text-gray-400 uppercase mb-4">Trusted by early UK contractors</p>
+          <p className="text-center text-xs font-semibold tracking-[0.15em] text-gray-400 uppercase mb-4">Built for UK trades</p>
           <div className="max-w-4xl mx-auto px-4 flex flex-wrap justify-center gap-x-8 gap-y-2 text-sm text-gray-500">
             <span>Framing · Groundworks</span>
             <span>Electrical · Plumbing</span>

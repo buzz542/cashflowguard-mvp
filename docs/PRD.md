@@ -94,7 +94,7 @@ From the landing page, metadata and system prompt:
 |---|---|
 | "Built around JCT / NEC style patterns" | True only at the prompt level. No form detection, clause library or JCT/NEC-specific logic. FIDIC is also in the prompt but not in marketing |
 | "Unlimited checks" (Pro) | 20 reviews per user per hour (configurable). Now disclosed as fair use in the Terms |
-| "Trusted by early UK contractors" | The section lists trade categories, not customers or logos. See Open Questions |
+| ~~"Trusted by early UK contractors"~~ | Relabelled "Built for UK trades": the strip lists trades, not customers |
 
 ## 5. Pricing and entitlements (as built)
 
@@ -168,7 +168,7 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 
 **Brand, domain and claims**
 20. Canonical domain: `guardconstruct.com` (code fallback, Stripe redirects) or `cashflowguard-mvp.vercel.app`? Needed for auth and reminder email sending (DNS).
-21. "Trusted by early UK contractors": is there evidence of actual users from those trades? If not, this may be a problem under ASA/CAP rules on testimonials and endorsements.
+21. "Trusted by early UK contractors". **Default shipped:** relabelled "Built for UK trades" (no unverified endorsement claim under ASA/CAP rules). Put a real claim back once you have customers who agree to it.
 22. Model. **Default shipped:** unchanged `claude-sonnet-4-5`, now `ANTHROPIC_MODEL`. Newer models exist; switching changes cost and output and should be tested on real contracts first.
 
 **Legal/compliance**
