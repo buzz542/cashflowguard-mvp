@@ -6,10 +6,13 @@ import ReviewResults from "./ReviewResults";
 import { ProfileMenu } from "./ProfileMenu";
 import { AuthModal, TermsGate } from "./AuthModal";
 import { DeadlinesPanel, DeadlinesView } from "./DeadlinesPanel";
+import { TeamView } from "./TeamPanel";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
-import type { Me, ReviewSummary, ApiError, ObligationRow, JobRow } from "@/lib/clientTypes";
+import type { Me, ReviewSummary, ApiError, ObligationRow, JobRow, TeamInfo } from "@/lib/clientTypes";
 
-type Step = "landing" | "context" | "upload" | "loading" | "results" | "history" | "deadlines";
+type Step = "landing" | "context" | "upload" | "loading" | "results" | "history" | "deadlines" | "team";
+type Assignable = { userId: string; name: string };
+const INVITE_KEY = "gc_invite";
 type Extraction = "ok" | "failed" | "not_run" | null;
 
 /** Pre-accounts, reviews lived in localStorage under this key. */
@@ -57,6 +60,8 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [pendingCheckout, setPendingCheckout] = useState(false);
   const [legacyCount, setLegacyCount] = useState(0);
+  const [teamMembers, setTeamMembers] = useState<Assignable[]>([]);
+  const [inviteTick, setInviteTick] = useState(0);
   const photoRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -123,14 +128,84 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
     }
   }, [userId, userEmail, refreshReviews]);
 
-  // Return from magic link / email confirmation / Stripe Checkout.
+  // Teammates, for assigning deadlines (team workspaces only).
+  const workspaceId = me?.workspace?.id;
+  const workspacePersonal = me?.workspace?.personal ?? true;
+  useEffect(() => {
+    if (!workspaceId || workspacePersonal) return setTeamMembers([]);
+    (async () => {
+      const res = await fetch(`/api/workspaces/${workspaceId}/members`, { cache: "no-store" });
+      if (!res.ok) return;
+      const t = await readJson<TeamInfo>(res);
+      setTeamMembers((t.members ?? []).map((m) => ({ userId: m.userId, name: m.name })));
+    })();
+  }, [workspaceId, workspacePersonal]);
+
+  const switchWorkspace = useCallback(
+    async (id: string) => {
+      const res = await fetch("/api/workspaces/active", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId: id })
+      });
+      if (!res.ok) {
+        setBanner((await readJson<object>(res)).error || "Could not switch workspace");
+        return;
+      }
+      const fresh = await refreshMe();
+      await refreshReviews();
+      setView("app");
+      setStep("landing");
+      if (fresh?.workspace) setBanner(`Now working in ${fresh.workspace.personal ? "your personal workspace" : fresh.workspace.name}.`);
+    },
+    [refreshMe, refreshReviews]
+  );
+
+  // Team invite links (/?invite=TOKEN): keep the token until the user is signed in, then accept.
+  useEffect(() => {
+    if (!userId) return;
+    let token: string | null = null;
+    try {
+      token = sessionStorage.getItem(INVITE_KEY);
+    } catch {
+      /* storage unavailable */
+    }
+    if (!token) return;
+    (async () => {
+      const res = await fetch("/api/invites/accept", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token })
+      });
+      const data = await readJson<{ workspaceId: string }>(res);
+      // Keep the token if it was sent to a different address, so they can log in with the right one.
+      if (data.code !== "email_mismatch") {
+        try { sessionStorage.removeItem(INVITE_KEY); } catch { /* ignore */ }
+      }
+      if (!res.ok) return setBanner(data.error || "Could not accept the invite.");
+      const fresh = await refreshMe();
+      await refreshReviews();
+      setView("app");
+      setStep("landing");
+      setBanner(`You've joined ${fresh?.workspace?.name ?? "the team"}.`);
+    })();
+  }, [userId, inviteTick, refreshMe, refreshReviews]);
+
+  // Return from magic link / email confirmation / Stripe Checkout / team invite.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const auth = params.get("auth");
     const checkout = params.get("checkout");
     const sessionId = params.get("session_id");
-    if (!auth && !checkout) return;
+    const invite = params.get("invite");
+    if (!auth && !checkout && !invite) return;
     window.history.replaceState({}, "", window.location.pathname);
+
+    if (invite) {
+      try { sessionStorage.setItem(INVITE_KEY, invite); } catch { /* ignore */ }
+      setInviteTick((t) => t + 1);
+      setBanner("You've been invited to a team. Log in or create an account with the email address the invite was sent to.");
+    }
 
     if (auth === "ok") {
       setView("app");
@@ -438,6 +513,8 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
               onViewAllReviews={openPastReviews}
               onViewDeadlines={() => { setView("app"); setStep("deadlines"); }}
               onToggleReminders={me.canTrackDeadlines ? toggleReminderEmails : undefined}
+              onSwitchWorkspace={switchWorkspace}
+              onOpenTeam={() => { setView("app"); setStep("team"); }}
             />
           ) : (
             <button type="button" onClick={() => setAuthMode("login")} className="text-sm text-gray-600">Log in</button>
@@ -573,7 +650,8 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
                 "Past contract reviews saved to your account, on any device",
                 `Email reminders before notice and payment deadlines${remindersProOnly ? " (Pro)" : ""}`,
                 "Photo, PDF and Word upload",
-                "Pro plan for unlimited checks"
+                "Pro plan for unlimited checks",
+                "Team workspaces: shared reviews and deadlines, Pro per seat"
               ].map((f) => (
                 <div key={f} className="flex gap-3 bg-white rounded-xl border p-4 text-sm text-gray-700">
                   <span className="text-blue-600 font-bold">✓</span>
@@ -616,7 +694,7 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
               <li className="bg-white border rounded-xl px-4 py-3">✓ Live: action plan + suggested wording</li>
               <li className="bg-white border rounded-xl px-4 py-3">✓ Live: history across devices</li>
               <li className="bg-white border rounded-xl px-4 py-3">✓ Live: notice deadline reminders</li>
-              <li className="bg-white border rounded-xl px-4 py-3">→ Team seats for small firms</li>
+              <li className="bg-white border rounded-xl px-4 py-3">✓ Live: team seats for small firms</li>
             </ul>
           </div>
         </section>
@@ -656,6 +734,11 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
                   {!me?.isPro && me?.free && <> · {me.free.remaining} free check{me.free.remaining === 1 ? "" : "s"} left</>}
                 </p>
               )}
+              {me?.workspace && !me.workspace.personal && (
+                <p className="text-sm text-gray-600">
+                  Team: <strong>{me.workspace.name}</strong>. Reviews and deadlines here are shared with your team.
+                </p>
+              )}
               <button type="button" onClick={startCheck} className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl">
                 Start a new check →
               </button>
@@ -665,11 +748,28 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
               <button type="button" onClick={() => setStep("deadlines")} className="w-full border font-semibold py-3 rounded-xl text-sm">
                 Deadlines I&apos;m tracking
               </button>
+              <button type="button" onClick={() => setStep("team")} className="w-full border font-semibold py-3 rounded-xl text-sm">
+                {me?.workspace && !me.workspace.personal ? "Team settings" : "Teams"}
+              </button>
             </div>
           </div>
         )}
 
-        {step === "deadlines" && <DeadlinesView onBack={() => setStep("landing")} onOpenReview={openReview} />}
+        {step === "deadlines" && (
+          <DeadlinesView onBack={() => setStep("landing")} onOpenReview={openReview} members={teamMembers} />
+        )}
+
+        {step === "team" && me?.workspace && (
+          <TeamView
+            me={me}
+            onBack={() => setStep("landing")}
+            onSwitch={switchWorkspace}
+            onChanged={async () => {
+              await refreshMe();
+              await refreshReviews();
+            }}
+          />
+        )}
 
         {step === "history" && (
           <div className="bg-white rounded-2xl border p-5 space-y-4">
@@ -801,6 +901,7 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
               onUpgrade={() => setShowSubscribe(true)}
               onObligations={setObligations}
               onJob={setJob}
+              members={teamMembers}
             />
             <button type="button" onClick={startCheck} className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl">
               Start another check →

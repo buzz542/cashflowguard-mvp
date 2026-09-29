@@ -45,6 +45,11 @@ export default function PrivacyPage() {
             For free-tier limits: a normalised form of your email address and a one-way hash of your IP address.
           </li>
           <li>
+            If you use a team workspace: your membership, and the email addresses of people invited (kept until the
+            invite is accepted, revoked or expires). Other members of a team can see your name, email address, and the
+            reviews and deadlines you create in that team.
+          </li>
+          <li>
             If you use deadline reminders: the deadlines picked out of your contract (including short quotes of the
             relevant clauses), job names, dates you enter, and a record of reminder emails sent.
           </li>
@@ -88,7 +93,7 @@ export default function PrivacyPage() {
             <strong>Vercel</strong> — website hosting and serverless infrastructure.
           </li>
           <li>
-            <strong>Resend</strong> — sending deadline reminder emails.
+            <strong>Resend</strong> — sending deadline reminder and team invite emails.
           </li>
         </ul>
         <p className="mt-2">

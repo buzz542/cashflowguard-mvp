@@ -11,13 +11,24 @@ export function remindersAllowed(isPro: boolean): boolean {
 
 export const OBLIGATION_COLUMNS =
   "id, workspace_id, review_id, job_id, kind, title, clause_ref, source_quote, trigger, fixed_date, day_of_month, " +
-  "event_description, offset_days, direction, day_basis, status, event_date, due_date, due_basis, created_at";
+  "event_description, offset_days, direction, day_basis, status, event_date, due_date, due_basis, assignee_id, created_at";
 
 type Row = ObligationTiming & {
   id: string;
   status: "suggested" | "confirmed" | "dismissed";
+  workspace_id: string;
   job_id: string | null;
+  assignee_id: string | null;
 };
+
+/**
+ * Who gets the reminder: the assignee, else whoever started tracking the job, else the
+ * workspace owner. People who have left the workspace are skipped.
+ */
+export function pickRecipient(candidates: Array<string | null | undefined>, members: Set<string>): string | null {
+  for (const c of candidates) if (c && members.has(c)) return c;
+  return null;
+}
 
 /**
  * Recompute an obligation's due date and replace its pending reminders.
@@ -29,12 +40,18 @@ export async function rescheduleObligation(admin: SupabaseClient, obligationId: 
   const row = o as unknown as Row;
 
   let jurisdiction: Jurisdiction = "england-and-wales";
-  let recipient: string | null = null;
+  let jobCreator: string | null = null;
   if (row.job_id) {
     const { data: job } = await admin.from("jobs").select("jurisdiction, created_by").eq("id", row.job_id).single();
     if (job && isJurisdiction(job.jurisdiction)) jurisdiction = job.jurisdiction;
-    recipient = (job?.created_by as string | null) ?? null;
+    jobCreator = (job?.created_by as string | null) ?? null;
   }
+  const [{ data: ws }, { data: memberRows }] = await Promise.all([
+    admin.from("workspaces").select("owner_id").eq("id", row.workspace_id).single(),
+    admin.from("workspace_members").select("user_id").eq("workspace_id", row.workspace_id)
+  ]);
+  const members = new Set((memberRows ?? []).map((m) => m.user_id as string));
+  const recipient = pickRecipient([row.assignee_id, jobCreator, ws?.owner_id as string | undefined], members);
 
   const holidays = await loadHolidays(jurisdiction);
   const due = computeDue(row, today, holidays);
@@ -60,4 +77,28 @@ export async function rescheduleObligation(admin: SupabaseClient, obligationId: 
     }
   }
   return updated;
+}
+
+/**
+ * After someone leaves or is removed from a workspace: unassign their deadlines and
+ * re-route every reminder that was going to them.
+ */
+export async function reassignAfterMemberLeft(admin: SupabaseClient, workspaceId: string, userId: string) {
+  const { data: assigned } = await admin
+    .from("obligations")
+    .update({ assignee_id: null })
+    .eq("workspace_id", workspaceId)
+    .eq("assignee_id", userId)
+    .select("id");
+  const { data: pending } = await admin
+    .from("reminders")
+    .select("obligation_id, obligations!inner(workspace_id)")
+    .eq("user_id", userId)
+    .eq("status", "pending")
+    .eq("obligations.workspace_id", workspaceId);
+  const ids = new Set<string>([
+    ...(assigned ?? []).map((o) => o.id as string),
+    ...(pending ?? []).map((r) => r.obligation_id as string)
+  ]);
+  for (const id of Array.from(ids)) await rescheduleObligation(admin, id);
 }

@@ -4,6 +4,7 @@ export type Me = {
   termsAccepted?: boolean;
   termsVersion?: string;
   workspace?: { id: string; name: string; personal: boolean; role: "owner" | "member" };
+  workspaces?: Array<{ id: string; name: string; personal: boolean; role: "owner" | "member" }>;
   isPro?: boolean;
   subscription?: { status: string | null; currentPeriodEnd: string | null; seatCount: number } | null;
   canManageBilling?: boolean;
@@ -32,7 +33,17 @@ export type ObligationRow = {
   event_date: string | null;
   due_date: string | null;
   due_basis: "fixed" | "monthly" | "calendar" | "working" | "manual" | null;
+  assignee_id: string | null;
   created_at: string;
+};
+
+export type TeamMember = { userId: string; email: string; name: string; role: "owner" | "member"; joinedAt: string; hasSeat: boolean };
+export type TeamInvite = { id: string; email: string; created_at: string; expires_at: string };
+export type TeamInfo = {
+  workspace: { id: string; name: string; personal: boolean; role: "owner" | "member" };
+  members: TeamMember[];
+  invites: TeamInvite[];
+  seats: { paid: number; used: number; max: number; subscriptionActive: boolean; compPro: boolean };
 };
 
 export type JobRow = { id: string; name: string; jurisdiction: string; created_at?: string };

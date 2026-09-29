@@ -70,6 +70,11 @@ From the landing page, metadata and system prompt:
 | **Reminder emails** | Daily cron; one digest per person; 2 working days before + on the day; late confirmations get the heads-up immediately. Stops if Pro lapses, the deadline is dismissed, or the user opts out | `api/cron/reminders`, `claim_due_reminders()` |
 | **Deadlines view** | All confirmed deadlines: needs a date / coming up / passed | `DeadlinesView` |
 | **Reminder opt-out** | Toggle in the account menu | `api/me/preferences` |
+| **Team workspaces** | Create a team (up to 3 owned), switch between Personal and teams. Reviews, jobs and deadlines in a team are shared with its members | `api/workspaces*`, `TeamPanel.tsx`, `ProfileMenu.tsx` |
+| **Invites** | Owner invites by email; single-use link, 7 days, only for that address; hashed token; emailed if Resend is set up, otherwise the link is shown once to copy. Revoke; accept on login | `api/workspaces/[id]/invites*`, `api/invites/accept`, `accept_workspace_invite()` |
+| **Per-seat Pro** | Owner buys N seats (≥ current members, ≤ 25) in Stripe Checkout; seats go owner first, then by join date; members without a seat use their own free check. Seat changes via the Stripe portal | `api/checkout`, `lib/entitlements.ts` |
+| **Members** | List with seat status; owner removes, members leave. Leaving re-routes their deadlines and reminders | `api/workspaces/[id]/members*` |
+| **Deadline assignees** | In a team, each confirmed deadline's reminders can go to a chosen teammate (else whoever started tracking, else the owner) | `api/obligations/[id]`, `pickRecipient()` |
 | Privacy Policy, Terms of Use | Updated for accounts, stored history, Supabase, fair use, free-tier rules | `privacy/`, `terms/` |
 | Report a problem | `mailto:` link to founder | footer |
 | Rate limiting | Free tier in Postgres (durable). Per-user hourly speed bumps in memory | `lib/rateLimit.ts`, `claim_free_review()` |
@@ -80,7 +85,7 @@ From the landing page, metadata and system prompt:
 | Item | What exists today | What's missing |
 |---|---|---|
 | ~~Cloud history across devices~~ | **Live since Phase 1** | n/a |
-| **Team seats for small firms** | Data model is workspace-based and seat-aware (`workspaces`, `workspace_members`, `subscriptions.seat_count`, seat ranking in entitlements) but every user only has a personal workspace | Team workspaces, invites, seat billing, UI |
+| ~~Team seats for small firms~~ | **Live since Phase 3** | n/a |
 | ~~Notice deadline reminders~~ | **Live since Phase 2** | n/a |
 
 ### 4.3 Implied or claimed but not really there
@@ -100,6 +105,7 @@ From the landing page, metadata and system prompt:
 | Upload/OCR | Requires login; 30 files/user/hour; not counted against the free allowance | Same |
 | History | Account, any device | Same |
 | Deadline reminders | Upsell panel only (`REMINDERS_PRO_ONLY=true`, default) | Yes |
+| Teams | Can create and join teams; no Pro seat until the owner buys seats | Per seat: `STRIPE_TEAM_PRICE_ID` if set, else the Pro price × seats (i.e. £19/seat by default) |
 | Billing mgmt | n/a | Stripe portal (workspace owner) |
 
 The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe webhook, or `workspaces.comp_pro`), for the signed-in user's workspace. Nothing the browser sends can make someone Pro.
@@ -126,6 +132,8 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 - Refresh/back mid-flow loses the check in progress (saved reviews are safe).
 - Email confirmation is now required before the first free check: more friction between landing and first value.
 - **Deadline extraction has not been measured against real contracts.** It's tested for shape and safety (bad output is dropped, not guessed), not for how often it finds the right deadlines. Needs an eval on a set of real JCT/NEC/bespoke subcontracts before it's marketed hard.
+- Team owners can't transfer ownership or delete a team from the app (support request needed).
+- A removed member's reviews stay with the team (work product belongs to the firm). Confirm that's what customers expect.
 - Reminders run once a day (06:00 UTC); a deadline confirmed after that run gets its first email the next morning.
 - Deadlines that run from an event (instruction, completion) have no date, and so no reminder, until the user enters the event date.
 
@@ -153,21 +161,21 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 
 **Roadmap definitions**
 15. Cloud history retention. **Default shipped:** kept until the user deletes it or asks for account deletion; full contract text never stored. Is a fixed retention period (e.g. 24 months inactive) wanted?
-16. Team seats: per-seat pricing or a flat team plan? Is there a seat cap given the <25 staff target?
+16. Team pricing. **Default shipped:** per seat, same price as Pro unless `STRIPE_TEAM_PRICE_ID` is set; cap 25 people per team (`MAX_TEAM_SEATS`). Is a flat team price or a volume discount wanted?
 17. Notice reminders. **Default shipped:** Pro-only (`REMINDERS_PRO_ONLY`), email only, notices = payment applications, payment/pay less notices, variation, EOT/delay/early warning/claim notices, retention release, final account, other time-limited notices. SMS or calendar export not built.
 18. Reminder timing. **Default shipped:** 2 working days before + on the day. Is that the right lead time for a site team?
 19. When the contract doesn't say calendar or working days. **Default shipped:** use whichever date is earlier, and say so in the UI and email. Alternative would be to follow the Construction Act's counting rules, which is closer to a legal interpretation.
 
 **Brand, domain and claims**
-18. Canonical domain: `guardconstruct.com` (code fallback, Stripe redirects) or `cashflowguard-mvp.vercel.app`? Needed for auth and reminder email sending (DNS).
-19. "Trusted by early UK contractors": is there evidence of actual users from those trades? If not, this may be a problem under ASA/CAP rules on testimonials and endorsements.
-20. Model. **Default shipped:** unchanged `claude-sonnet-4-5`, now `ANTHROPIC_MODEL`. Newer models exist; switching changes cost and output and should be tested on real contracts first.
+20. Canonical domain: `guardconstruct.com` (code fallback, Stripe redirects) or `cashflowguard-mvp.vercel.app`? Needed for auth and reminder email sending (DNS).
+21. "Trusted by early UK contractors": is there evidence of actual users from those trades? If not, this may be a problem under ASA/CAP rules on testimonials and endorsements.
+22. Model. **Default shipped:** unchanged `claude-sonnet-4-5`, now `ANTHROPIC_MODEL`. Newer models exist; switching changes cost and output and should be tested on real contracts first.
 
 **Legal/compliance**
-21. Privacy policy says Anthropic processes documents "solely" to extract text and summarise. Has Anthropic's commercial data-retention position been checked and should it be stated?
-22. Terms cap liability at the greater of £50 or 3 months' fees. Has this been reviewed by anyone qualified?
-23. Who is the data controller: a company or a sole trader? The privacy policy says "GuardConstruct (we)" without a legal entity or address.
-24. Supabase region: the privacy policy should name where data is hosted once the project is created.
+23. Privacy policy says Anthropic processes documents "solely" to extract text and summarise. Has Anthropic's commercial data-retention position been checked and should it be stated?
+24. Terms cap liability at the greater of £50 or 3 months' fees. Has this been reviewed by anyone qualified?
+25. Who is the data controller: a company or a sole trader? The privacy policy says "GuardConstruct (we)" without a legal entity or address.
+26. Supabase region: the privacy policy should name where data is hosted once the project is created.
 
 ## 9. Build log
 
@@ -176,3 +184,4 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 | 0 | Removed unauthenticated `/api/portal` and the founder any-password login |
 | 1 | Supabase accounts + email confirmation; Terms acceptance gate; workspace/subscription/review schema with RLS; Stripe webhook sync; authenticated checkout/portal; cloud history + device import; durable free-tier ledger with alias and IP protection; login required for uploads; legal pages updated; Node 22; tests |
 | 2 | Deadline extraction (structured output), jobs, confirm/dismiss/date flow, UK bank-holiday-aware date maths, daily reminder digest via Resend + Vercel Cron, deadlines view, opt-out; Terms (new §5B, re-acceptance required) and Privacy updated |
+| 3 | Team workspaces, email invites (hashed single-use tokens), per-seat Stripe checkout with adjustable quantity, seat allocation by join order, member removal with reminder re-routing, deadline assignees, workspace switcher; Terms §4A, Privacy updated; mobile account-menu overflow fixed |

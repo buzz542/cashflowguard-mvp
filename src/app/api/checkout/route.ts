@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import type Stripe from "stripe";
 import { rateLimit } from "@/lib/rateLimit";
 import { requireUser, loadWorkspaceContext, jsonError, ACTIVE_WORKSPACE_COOKIE } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
-import { subscriptionIsActive } from "@/lib/entitlements";
-import { appOrigin } from "@/lib/config";
+import { subscriptionIsActive, clampSeats } from "@/lib/entitlements";
+import { appOrigin, config } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -48,12 +49,28 @@ export async function POST(req: NextRequest) {
       if (customerId !== customer.id) await stripe.customers.del(customer.id).catch(() => undefined);
     }
 
+    // Personal: one Pro seat. Team: per-seat, using STRIPE_TEAM_PRICE_ID if set (else the Pro price).
+    let lineItem: Stripe.Checkout.SessionCreateParams.LineItem = { price: priceId, quantity: 1 };
+    if (!ctx.workspace.personal) {
+      const body = await req.json().catch(() => ({}));
+      const { count } = await admin
+        .from("workspace_members")
+        .select("user_id", { count: "exact", head: true })
+        .eq("workspace_id", ctx.workspace.id);
+      const members = count ?? 1;
+      lineItem = {
+        price: process.env.STRIPE_TEAM_PRICE_ID || priceId,
+        quantity: clampSeats(body?.seats, members, config.maxTeamSeats),
+        adjustable_quantity: { enabled: true, minimum: Math.max(1, Math.min(members, config.maxTeamSeats)), maximum: config.maxTeamSeats }
+      };
+    }
+
     const origin = appOrigin(req);
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
       client_reference_id: ctx.workspace.id,
-      line_items: [{ price: priceId, quantity: 1 }],
+      line_items: [lineItem],
       success_url: `${origin}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/?checkout=cancel`,
       allow_promotion_codes: true,

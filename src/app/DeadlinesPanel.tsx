@@ -25,13 +25,15 @@ function ObligationItem({
   jobName,
   canConfirm,
   onChange,
-  footer
+  footer,
+  members = []
 }: {
   o: ObligationRow;
   jobName?: string;
   canConfirm: boolean;
   onChange: (o: ObligationRow) => void;
   footer?: React.ReactNode;
+  members?: Array<{ userId: string; name: string }>;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -140,6 +142,22 @@ function ObligationItem({
           </button>
         )}
       </div>
+      {o.status === "confirmed" && members.length > 1 && (
+        <label className="flex items-center gap-2 text-xs text-gray-700">
+          Reminders go to
+          <select
+            disabled={busy}
+            className="rounded-lg border px-2 py-1 text-xs"
+            value={o.assignee_id ?? ""}
+            onChange={(e) => run({ assigneeId: e.target.value || null })}
+          >
+            <option value="">Whoever started tracking</option>
+            {members.map((m) => (
+              <option key={m.userId} value={m.userId}>{m.name}</option>
+            ))}
+          </select>
+        </label>
+      )}
       {o.status === "confirmed" && o.trigger === "event" && !o.due_date && (
         <p className="text-xs text-amber-700">No reminder until you enter the date above.</p>
       )}
@@ -159,7 +177,8 @@ export function DeadlinesPanel({
   defaultJobName,
   onUpgrade,
   onObligations,
-  onJob
+  onJob,
+  members = []
 }: {
   reviewId: string | null;
   obligations: ObligationRow[];
@@ -170,6 +189,7 @@ export function DeadlinesPanel({
   onUpgrade: () => void;
   onObligations: (list: ObligationRow[]) => void;
   onJob: (job: JobRow) => void;
+  members?: Array<{ userId: string; name: string }>;
 }) {
   const [name, setName] = useState(defaultJobName);
   const [jurisdiction, setJurisdiction] = useState("england-and-wales");
@@ -258,7 +278,7 @@ export function DeadlinesPanel({
 
       <ul className="space-y-2">
         {visible.map((o) => (
-          <ObligationItem key={o.id} o={o} canConfirm={!!job}
+          <ObligationItem key={o.id} o={o} canConfirm={!!job} members={members}
             onChange={(u) => onObligations(obligations.map((x) => (x.id === u.id ? u : x)))} />
         ))}
       </ul>
@@ -272,7 +292,15 @@ export function DeadlinesPanel({
 }
 
 /** Every confirmed deadline in the workspace. */
-export function DeadlinesView({ onBack, onOpenReview }: { onBack: () => void; onOpenReview: (id: string) => void }) {
+export function DeadlinesView({
+  onBack,
+  onOpenReview,
+  members = []
+}: {
+  onBack: () => void;
+  onOpenReview: (id: string) => void;
+  members?: Array<{ userId: string; name: string }>;
+}) {
   const [obligations, setObligations] = useState<ObligationRow[] | null>(null);
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [error, setError] = useState("");
@@ -302,7 +330,7 @@ export function DeadlinesView({ onBack, onOpenReview }: { onBack: () => void; on
         <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">{title}</h2>
         <ul className="space-y-2">
           {items.map((o) => (
-            <ObligationItem key={o.id} o={o} jobName={jobName(o.job_id)} canConfirm onChange={update}
+            <ObligationItem key={o.id} o={o} jobName={jobName(o.job_id)} canConfirm onChange={update} members={members}
               footer={
                 <button type="button" className="text-xs text-blue-600" onClick={() => onOpenReview(o.review_id)}>
                   Open the contract review

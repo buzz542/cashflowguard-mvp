@@ -48,6 +48,7 @@ See `.env.example` for the full list with comments. Key ones:
 | `RESEND_API_KEY`, `EMAIL_FROM` | Reminder emails (`lib/email.ts`) |
 | `CRON_SECRET` | Bearer token Vercel Cron sends to `/api/cron/reminders` |
 | `REMINDERS_PRO_ONLY`, `ANTHROPIC_EXTRACTION_MODEL` | Deadline extraction + reminders |
+| `STRIPE_TEAM_PRICE_ID`, `MAX_TEAM_SEATS`, `MAX_OWNED_TEAMS`, `INVITE_TTL_DAYS` | Teams |
 | `FREE_REVIEW_LIMIT`, `FREE_REVIEWS_PER_IP_PER_DAY`, `FREE_REVIEWS_GLOBAL_PER_DAY`, `REVIEWS_PER_USER_PER_HOUR` | `src/lib/config.ts` |
 | `NEXT_PUBLIC_APP_URL` | Redirect URLs (preferred over the request `Origin`) |
 
@@ -60,7 +61,8 @@ src/
     page.tsx                  Server wrapper: passes config (free limit) into HomeClient
     HomeClient.tsx            The app: marketing, flows, history, banners
     AuthModal.tsx             Signup/login (password or magic link) + TermsGate
-    DeadlinesPanel.tsx        Extracted deadlines under a review + the all-deadlines view
+    DeadlinesPanel.tsx        Extracted deadlines under a review + the all-deadlines view (+ assignee select)
+    TeamPanel.tsx             Create team / members + seats / invites / buy seats
     ProfileMenu.tsx           Avatar dropdown (+ reminder email toggle)
     ReviewResults.tsx         Markdown renderer + copy buttons on suggested wording
     auth/callback/route.ts    Magic link / email confirmation landing (PKCE code or token_hash)
@@ -81,7 +83,12 @@ src/
       obligations/[id]/route.ts PATCH confirm/dismiss, event date, manual date → reschedule
       deadlines/route.ts      GET confirmed deadlines + jobs for the workspace
       me/preferences/route.ts PATCH reminder email opt-out
-      cron/reminders/route.ts GET daily sender (CRON_SECRET)
+      cron/reminders/route.ts GET daily sender (CRON_SECRET); also purges used/expired invites
+      workspaces/route.ts     POST create team workspace
+      workspaces/active/route.ts POST switch active workspace (gc_ws cookie)
+      workspaces/[id]/members[/userId] GET members+seats+invites / DELETE remove or leave
+      workspaces/[id]/invites[/inviteId] POST invite / DELETE revoke
+      invites/accept/route.ts POST accept invite token
   lib/
     config.ts                 Env-driven settings, TERMS_VERSION, PROMPT_VERSION, appOrigin()
     session.ts                requireUser(), loadWorkspaceContext(), jsonError()
@@ -106,11 +113,13 @@ src/
     reminderEmail.ts          Digest email (HTML-escaped)
     email.ts                  Resend HTTP call
     membership.ts             roleIn(), UUID_RE
+    invites.ts                Invite token generation/hashing, accept error messages
 supabase/
   migrations/0001_accounts_history.sql
   migrations/0002_deadline_reminders.sql
+  migrations/0003_team_seats.sql
   tests/auth_shim.sql         Fake auth schema + roles for local Postgres
-  tests/0001_rls_test.sql, tests/0002_reminders_test.sql
+  tests/0001_rls_test.sql, tests/0002_reminders_test.sql, tests/0003_teams_test.sql
 vercel.json                   Daily cron for /api/cron/reminders
 scripts/test-db.sh
 tests/*.test.ts
@@ -129,7 +138,9 @@ Tables (`supabase/migrations/0001_accounts_history.sql`):
 - `obligations` (per review; trigger shape enforced by a CHECK; `status` suggested/confirmed/dismissed; `due_date` + `due_basis`)
 - `reminders` (obligation × user × send date × lead/due; status pending/sending/sent/skipped/failed)
 - `profiles.reminder_emails` (opt-out)
-- Functions: `is_workspace_member(ws)` (for RLS), `claim_free_review(...)`, `refund_free_review(event)`, `claim_due_reminders(today, limit)`
+- `workspace_invites` (email, **sha256 of the token only**, expiry, accepted_at); `obligations.assignee_id`; FK `workspace_members.user_id → profiles.id` (lets the API embed member profiles)
+- Trigger: personal workspaces can never gain a second member
+- Functions: `is_workspace_member(ws)`, `is_workspace_owner(ws)`, `shares_workspace_with(user)` (for RLS), `claim_free_review(...)`, `refund_free_review(event)`, `claim_due_reminders(today, limit)`, `accept_workspace_invite(hash, user, email, max)`
 
 **The rule:** the browser/user JWT can only `SELECT`, and only rows RLS allows (own profile, workspaces you belong to and their members, subscriptions and reviews). Every write goes through an API route with the service-role client *after* that route has checked the session and membership. Don't add user-facing write grants or policies; add an API route.
 
@@ -166,6 +177,14 @@ Flow: `/api/review` runs `extractObligations()` **in parallel** with the review 
 - **Sender**: `/api/cron/reminders` (Vercel Cron, daily 06:00 UTC, `CRON_SECRET`). Rolls monthly deadlines forward, then `claim_due_reminders()` atomically skips invalid rows (unconfirmed, past, opted out) and claims due ones (`FOR UPDATE SKIP LOCKED`; stale `sending` retried after 30 min, max 3, never after the due date). Re-checks Pro, sends one digest per user, marks sent.
 - Emails escape all contract-derived text (`reminderEmail.ts`). Keep it that way.
 - Bump `EXTRACTION_VERSION` when the extraction prompt/schema changes (stored per obligation).
+
+## Teams
+
+- Every user has a **personal** workspace; they can own up to `MAX_OWNED_TEAMS` team workspaces and belong to others. The active one is the `gc_ws` httpOnly cookie; `loadWorkspaceContext()` honours it only if the user is a member, else falls back to personal. All workspace-scoped routes (reviews, checkout, portal, deadlines) use the active workspace.
+- **Invites**: owner only, team workspaces only, capped at `MAX_TEAM_SEATS` including pending. Only the hash of the token is stored; the link is returned once. `accept_workspace_invite()` locks the invite and checks: single use, expiry, **signed-in email must equal the invited email**, not personal, capacity. The client keeps `?invite=` in sessionStorage until the user is signed in.
+- **Seats**: `memberRanks()` orders owner first then join date; `isProInWorkspace()` gives Pro to ranks below `seat_count`. Team checkout uses `STRIPE_TEAM_PRICE_ID || STRIPE_PRICE_ID` with `adjustable_quantity` (min = current members). Seat changes happen in the Stripe portal and arrive via the webhook.
+- **Leaving/removal**: owner can't leave. `reassignAfterMemberLeft()` clears their assignments and reschedules every deadline whose reminders were going to them. Their reviews stay with the team.
+- **Reminder recipient**: `pickRecipient([assignee, job creator, owner], members)`.
 
 ## Uploads
 
@@ -209,6 +228,7 @@ Files are processed in memory and never persisted. The client continues past a f
 10. **Extraction quality is unmeasured.** Tests cover shape and safety, not recall/precision on real contracts. Build an eval before relying on it in marketing.
 11. **Pro reviews cost roughly twice as much in input tokens** (review + extraction both send the full contract).
 12. **One cron run a day.** A deadline confirmed after 06:00 UTC gets its first email the next day. The in-app list is always current.
+13. **No ownership transfer or team deletion** in the app.
 
 ## Note on this file's location
 

@@ -54,6 +54,13 @@ export async function GET(req: NextRequest) {
   const today = ukToday();
   const summary = { rolled: 0, claimed: 0, sent: 0, skipped: 0, failed: 0 };
 
+  // 0. Privacy policy: invite emails are kept only until accepted, revoked or expired.
+  const { error: invErr } = await admin
+    .from("workspace_invites")
+    .delete()
+    .or(`accepted_at.not.is.null,expires_at.lt.${new Date().toISOString()}`);
+  if (invErr) console.error("invite cleanup:", invErr.message);
+
   // 1. Monthly deadlines whose date has passed move to next month (and get new reminders).
   const { data: stale } = await admin
     .from("obligations")

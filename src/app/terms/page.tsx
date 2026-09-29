@@ -51,6 +51,14 @@ export default function TermsPage() {
           service. We may change limits, refuse service, or suspend abuse.
         </p>
 
+        <h2 className="text-lg font-bold mt-8 mb-2">4A. Team workspaces</h2>
+        <p>
+          You can create a team workspace and invite people by email. The person who creates it (the owner) is responsible
+          for its membership and billing. Everyone in a team can see the reviews and tracked deadlines created in it, and
+          these stay with the team if someone leaves or is removed. Pro in a team is bought per seat; seats go to the owner
+          first and then to members in the order they joined. Members without a seat use their own free allowance.
+        </p>
+
         <h2 className="text-lg font-bold mt-8 mb-2">5. Subscriptions and cancellation</h2>
         <p>
           Pro is billed via Stripe at the price shown at checkout (currently £19/month unless stated otherwise). Pro

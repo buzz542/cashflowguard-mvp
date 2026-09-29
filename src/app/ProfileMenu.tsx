@@ -11,7 +11,9 @@ export function ProfileMenu({
   onOpenReview,
   onViewAllReviews,
   onViewDeadlines,
-  onToggleReminders
+  onToggleReminders,
+  onSwitchWorkspace,
+  onOpenTeam
 }: {
   me: Me;
   onLogout: () => void;
@@ -21,6 +23,8 @@ export function ProfileMenu({
   onViewAllReviews?: () => void;
   onViewDeadlines?: () => void;
   onToggleReminders?: (on: boolean) => void;
+  onSwitchWorkspace?: (workspaceId: string) => void;
+  onOpenTeam?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -55,7 +59,9 @@ export function ProfileMenu({
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-72 rounded-xl border bg-white shadow-lg p-3 z-50">
+        // Phones: pinned under the header, full width. The avatar isn't at the screen edge, so a
+        // right-anchored 288px menu used to hang ~90px off the left of a 390px screen.
+        <div className="fixed left-4 right-4 top-14 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-72 max-h-[80vh] overflow-y-auto rounded-xl border bg-white shadow-lg p-3 z-50">
           <div className="flex items-center gap-3 pb-3 border-b">
             <span className="h-10 w-10 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center">
               {initial}
@@ -65,6 +71,26 @@ export function ProfileMenu({
               <p className="text-xs text-gray-500 truncate">{user.email}</p>
             </div>
           </div>
+
+          {(me.workspaces?.length ?? 0) > 1 && onSwitchWorkspace && (
+            <div className="py-3 border-b">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Workspace</p>
+              <ul className="space-y-0.5">
+                {me.workspaces!.map((w) => (
+                  <li key={w.id}>
+                    <button
+                      type="button"
+                      disabled={w.id === me.workspace?.id}
+                      onClick={() => { setOpen(false); onSwitchWorkspace(w.id); }}
+                      className={`w-full text-left rounded-lg px-2 py-1.5 text-sm ${w.id === me.workspace?.id ? "bg-blue-50 text-blue-800 font-semibold" : "hover:bg-gray-50"}`}
+                    >
+                      {w.personal ? "Personal" : w.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="py-3 space-y-1.5 text-sm border-b">
             <div className="flex justify-between items-center">
@@ -114,11 +140,16 @@ export function ProfileMenu({
             )}
           </div>
 
-          {(onViewDeadlines || onToggleReminders) && (
+          {(onViewDeadlines || onToggleReminders || onOpenTeam) && (
             <div className="py-3 border-b space-y-2">
               {onViewDeadlines && (
-                <button type="button" className="text-sm text-blue-600 font-medium" onClick={() => { setOpen(false); onViewDeadlines(); }}>
+                <button type="button" className="block text-sm text-blue-600 font-medium" onClick={() => { setOpen(false); onViewDeadlines(); }}>
                   Deadlines I&apos;m tracking
+                </button>
+              )}
+              {onOpenTeam && (
+                <button type="button" className="block text-sm text-blue-600 font-medium" onClick={() => { setOpen(false); onOpenTeam(); }}>
+                  {me.workspace && !me.workspace.personal ? "Team settings" : "Teams"}
                 </button>
               )}
               {onToggleReminders && (

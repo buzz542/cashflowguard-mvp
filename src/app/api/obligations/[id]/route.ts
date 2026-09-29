@@ -15,6 +15,7 @@ const STATUSES = new Set(["suggested", "confirmed", "dismissed"]);
  *   status     "confirmed" | "dismissed" | "suggested"
  *   eventDate  "YYYY-MM-DD" | null   (when the triggering event happened / will happen)
  *   dueDate    "YYYY-MM-DD" | null   (user's own date, overrides the calculation; null clears it)
+ *   assigneeId uuid | null           (teammate who gets the reminders; null = whoever started tracking)
  */
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireUser();
@@ -60,6 +61,15 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         patch.due_basis = "manual";
       } else {
         return jsonError(400, "Invalid date.");
+      }
+    }
+    if (body.assigneeId !== undefined) {
+      if (body.assigneeId === null) {
+        patch.assignee_id = null;
+      } else if (typeof body.assigneeId === "string" && UUID_RE.test(body.assigneeId) && (await roleIn(admin, o.workspace_id, body.assigneeId))) {
+        patch.assignee_id = body.assigneeId;
+      } else {
+        return jsonError(400, "They're not in this workspace.");
       }
     }
     if (!Object.keys(patch).length) return jsonError(400, "Nothing to change.");

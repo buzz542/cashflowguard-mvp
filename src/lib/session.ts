@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { User } from "@supabase/supabase-js";
 import { createSupabaseServerClient, getSupabaseAdmin, supabaseConfigured } from "./supabase/server";
-import { isProInWorkspace } from "./entitlements";
+import { isProInWorkspace, memberRanks } from "./entitlements";
 import { TERMS_VERSION } from "./config";
 
 export type WorkspaceContext = {
@@ -9,6 +9,8 @@ export type WorkspaceContext = {
   email: string;
   profile: { name: string | null; termsAccepted: boolean };
   workspace: { id: string; name: string; personal: boolean; role: "owner" | "member" };
+  /** Every workspace the user belongs to, for the switcher. */
+  workspaces: Array<{ id: string; name: string; personal: boolean; role: "owner" | "member" }>;
   isPro: boolean;
   subscription: {
     status: string | null;
@@ -90,6 +92,9 @@ export async function loadWorkspaceContext(
       termsAccepted: profile?.terms_version === TERMS_VERSION
     },
     workspace: { id: ws.id, name: ws.name, personal: ws.personal, role: chosen.role },
+    workspaces: rows
+      .map((r) => ({ id: r.workspaces.id, name: r.workspaces.name, personal: r.workspaces.personal, role: r.role }))
+      .sort((a, b) => Number(b.personal) - Number(a.personal) || a.name.localeCompare(b.name)),
     isPro: isProInWorkspace({
       compPro: ws.comp_pro,
       subscriptionStatus: (sub?.status as string | null) ?? null,
@@ -124,17 +129,11 @@ export async function isUserProInWorkspace(workspaceId: string, userId: string):
 }
 
 /** Owner is seat 0; everyone else by join date. Used to decide who is inside the paid seats. */
-async function rankInWorkspace(workspaceId: string, ownerId: string, userId: string): Promise<number> {
+export async function rankInWorkspace(workspaceId: string, ownerId: string, userId: string): Promise<number> {
   if (userId === ownerId) return 0;
   const admin = getSupabaseAdmin();
-  const { data } = await admin
-    .from("workspace_members")
-    .select("user_id, created_at")
-    .eq("workspace_id", workspaceId)
-    .order("created_at", { ascending: true });
-  const others = (data ?? []).filter((m) => m.user_id !== ownerId).map((m) => m.user_id as string);
-  const idx = others.indexOf(userId);
-  return idx < 0 ? -1 : idx + 1;
+  const { data } = await admin.from("workspace_members").select("user_id, created_at").eq("workspace_id", workspaceId);
+  return memberRanks(ownerId, (data ?? []) as Array<{ user_id: string; created_at: string }>).get(userId) ?? -1;
 }
 
 /** Cookie holding the workspace the user last switched to (Phase 3). */

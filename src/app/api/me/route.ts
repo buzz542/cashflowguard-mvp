@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
       termsAccepted: ctx.profile.termsAccepted,
       termsVersion: TERMS_VERSION,
       workspace: ctx.workspace,
+      workspaces: ctx.workspaces,
       isPro: ctx.isPro,
       subscription: ctx.subscription
         ? { status: ctx.subscription.status, currentPeriodEnd: ctx.subscription.currentPeriodEnd, seatCount: ctx.subscription.seatCount }

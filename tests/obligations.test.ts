@@ -95,3 +95,20 @@ describe("describeTiming", () => {
     expect(describeTiming({ ...timing({ offset_days: 0 }), event_description: "practical completion", due_basis: null })).toBe("On practical completion");
   });
 });
+
+import { pickRecipient } from "@/lib/reminderScheduler";
+
+describe("pickRecipient", () => {
+  const members = new Set(["owner", "alice", "bob"]);
+  it("assignee first, then job creator, then owner", () => {
+    expect(pickRecipient(["alice", "bob", "owner"], members)).toBe("alice");
+    expect(pickRecipient([null, "bob", "owner"], members)).toBe("bob");
+    expect(pickRecipient([null, null, "owner"], members)).toBe("owner");
+  });
+  it("skips people who have left", () => {
+    expect(pickRecipient(["gone", "also-gone", "owner"], members)).toBe("owner");
+  });
+  it("no one left → no reminder", () => {
+    expect(pickRecipient(["gone"], members)).toBeNull();
+  });
+});
