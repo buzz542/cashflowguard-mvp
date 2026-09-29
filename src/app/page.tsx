@@ -6,8 +6,6 @@ import ReviewResults from "./ReviewResults";
 import {
   ProfileMenu,
   withEntitlements,
-  isProEmail,
-  PRO_ACCOUNTS,
   loadReviews,
   saveReview,
   type User,
@@ -151,21 +149,11 @@ export default function HomePage() {
     await startCheckoutWithEmail(user?.email);
   };
 
-  const openBillingPortal = async () => {
-    if (!user?.email) return;
-    try {
-      const res = await fetch("/api/portal", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: user.email })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not open billing");
-      if (data.url) window.location.href = data.url;
-      else throw new Error("No portal URL");
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Could not open billing portal");
-    }
+  // Stripe's hosted portal login verifies the customer by emailing them a one-time code,
+  // so we never hand out a portal session based on an unauthenticated email.
+  const portalLoginUrl = process.env.NEXT_PUBLIC_STRIPE_PORTAL_LOGIN_URL || "";
+  const openBillingPortal = () => {
+    if (portalLoginUrl) window.location.href = portalLoginUrl;
   };
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -187,24 +175,14 @@ export default function HomePage() {
         email: normalised,
         passwordHash,
         freeUsed: false,
-        isPro: isProEmail(normalised),
-        name: PRO_ACCOUNTS[normalised] || normalised.split("@")[0]
+        isPro: false,
+        name: normalised.split("@")[0]
       });
     } else {
       const stored = localStorage.getItem("gc_user_" + normalised);
       if (!stored) {
-        if (isProEmail(normalised)) {
-          saveUser({
-            email: normalised,
-            passwordHash,
-            freeUsed: false,
-            isPro: true,
-            name: PRO_ACCOUNTS[normalised]
-          });
-        } else {
-          setAuthError("No account found. Please sign up.");
-          return;
-        }
+        setAuthError("No account found. Please sign up.");
+        return;
       } else {
         const u = JSON.parse(stored) as User & { password?: string };
         let ok = false;
@@ -213,7 +191,7 @@ export default function HomePage() {
         } else if (u.password) {
           ok = u.password === password;
         }
-        if (!ok && !isProEmail(normalised)) {
+        if (!ok) {
           setAuthError("Incorrect password.");
           return;
         }
@@ -221,8 +199,8 @@ export default function HomePage() {
           email: normalised,
           passwordHash,
           freeUsed: !!u.freeUsed,
-          isPro: isProEmail(normalised) ? true : !!u.isPro,
-          name: PRO_ACCOUNTS[normalised] || u.name || normalised.split("@")[0]
+          isPro: !!u.isPro,
+          name: u.name || normalised.split("@")[0]
         });
       }
     }
@@ -402,7 +380,7 @@ export default function HomePage() {
             <ProfileMenu
               user={user}
               onLogout={logout}
-              onManageBilling={user.isPro ? openBillingPortal : undefined}
+              onManageBilling={portalLoginUrl ? openBillingPortal : undefined}
               reviews={reviews}
               onOpenReview={openReview}
               onViewAllReviews={openPastReviews}

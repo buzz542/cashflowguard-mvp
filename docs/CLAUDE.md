@@ -119,7 +119,7 @@ This only affects the client. The server does **not** know about `PRO_ACCOUNTS`;
 - **Upgrade**: `goPro()` / subscribe modal → POST `/api/checkout` with the user's email → Stripe Checkout (`mode: subscription`, `STRIPE_PRICE_ID`, promo codes allowed, `customer_email` prefilled) → redirect.
 - **Return**: `/?checkout=success&session_id=cs_...`. `page.tsx` calls `GET /api/checkout/verify`, which returns `{ paid, customer_email }`. If paid, the client flips `isPro: true` on the local user record and strips the query string.
 - **Server Pro check**: `/api/review` calls `emailHasActivePro(email)` which does `customers.list({ email })` then `subscriptions.list` per customer, looking for `active` or `trialing`. This runs on **every review** (2+ Stripe API calls of latency).
-- **Manage billing**: Profile menu (only shown if client thinks `isPro`) → POST `/api/portal` with email → Stripe Billing Portal for the first customer matching that email.
+- **Manage billing**: Profile menu → Stripe's hosted customer-portal login link (`NEXT_PUBLIC_STRIPE_PORTAL_LOGIN_URL`). Stripe emails the customer a one-time code. Button is hidden if the env var is unset. (Before Phase 0 this was an unauthenticated `/api/portal` route.)
 - **No webhooks.** Nothing listens for cancellation, failed payment, etc. The client `isPro` flag is only ever set to `true`, never back to `false`.
 - Price (£19/month) is hardcoded in UI copy, not read from Stripe. If the Stripe price changes, the UI lies.
 
@@ -169,9 +169,9 @@ Ordered roughly by how much they'd hurt.
 
 ### Security
 
-1. **`/api/portal` hands out anyone's billing portal.** It takes an email in the body with no auth and returns a Stripe Billing Portal URL for that customer. Anyone who knows a subscriber's email can open their portal and cancel their sub, change their card, or see invoices. This is the most serious issue in the repo.
+1. ~~**`/api/portal` hands out anyone's billing portal.**~~ **Fixed in Phase 0**: route deleted; "Manage billing" now opens Stripe's hosted portal login (`NEXT_PUBLIC_STRIPE_PORTAL_LOGIN_URL`), which verifies the customer by emailed code. Original note: It takes an email in the body with no auth and returns a Stripe Billing Portal URL for that customer. Anyone who knows a subscriber's email can open their portal and cancel their sub, change their card, or see invoices. This is the most serious issue in the repo.
 2. **`/api/review` trusts the email in the body for Pro status.** Send a paying customer's email and you skip the free-tier limit. Costs you AI spend, not customer data, but it's the same root cause: no server-side identity.
-3. **Founder login accepts any password** (see above). Client-only impact today, but it's the kind of thing that becomes real the moment someone adds server trust on top of it.
+3. ~~**Founder login accepts any password**~~ **Fixed in Phase 0**: `PRO_ACCOUNTS` removed. Original note: Client-only impact today, but it's the kind of thing that becomes real the moment someone adds server trust on top of it.
 4. **`/api/extract` is completely ungated.** Image OCR is a paid Claude call; the only limit is 20/hour/IP, in-memory. It isn't counted against the free tier at all.
 5. Rate limits reset on every cold start and aren't shared across instances, so they're closer to a speed bump than a limit.
 

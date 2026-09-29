@@ -19,25 +19,8 @@ export type SavedReview = {
   result: string;
 };
 
-export const PRO_ACCOUNTS: Record<string, string> = {
-  "tobyburrows1@icloud.com": "Toby Burrows"
-};
-
-export function isProEmail(email: string) {
-  return Object.prototype.hasOwnProperty.call(PRO_ACCOUNTS, email.toLowerCase());
-}
-
 export function withEntitlements(u: User): User {
   const email = (u.email || "").toLowerCase().trim();
-  if (isProEmail(email)) {
-    return {
-      ...u,
-      email,
-      isPro: true,
-      freeUsed: false,
-      name: u.name || PRO_ACCOUNTS[email] || email.split("@")[0]
-    };
-  }
   return { ...u, email, name: u.name || email.split("@")[0] };
 }
 

@@ -56,7 +56,7 @@ From the landing page, metadata and system prompt:
 | Free tier | UI: 1 check per account. Server: 3 per IP per 24h for non-subscribers | `page.tsx`, `api/review` |
 | Pro subscription | £19/month via Stripe Checkout, promo codes allowed | `api/checkout` |
 | Post-checkout unlock | Verifies Checkout session, flips local account to Pro | `api/checkout/verify`, `page.tsx` |
-| Manage billing / cancel | Stripe Customer Portal | `api/portal` |
+| Manage billing / cancel | Stripe hosted Customer Portal login (emailed code) | `NEXT_PUBLIC_STRIPE_PORTAL_LOGIN_URL` |
 | Privacy Policy, Terms of Use | Static pages, England & Wales, UK GDPR, dated 29 Sep 2026 | `privacy/`, `terms/` |
 | Report a problem | `mailto:` link to founder | footer |
 | Rate limiting | Per-IP, in-memory, best effort | `lib/rateLimit.ts` |
@@ -107,9 +107,9 @@ Server decides Pro by looking up the email (sent by the client) in Stripe for an
 
 ## 7. Known issues that affect the product (details in `docs/CLAUDE.md`)
 
-- Anyone can open any subscriber's Stripe billing portal by email (`/api/portal` is unauthenticated). **Fix before growing the paid base.**
+- ~~Anyone can open any subscriber's Stripe billing portal by email.~~ Fixed in Phase 0 (hosted portal login link).
 - Anyone can claim Pro on the review endpoint by sending a subscriber's email.
-- Founder email logs in with any password client-side.
+- ~~Founder email logs in with any password client-side.~~ Fixed in Phase 0.
 - Cancelled Pro users still see "Pro" in the UI but get free-tier limits from the server.
 - Photos/PDFs over ~4.5MB likely fail on Vercel despite the "max 12MB" message.
 - Scanned PDFs are rejected instead of OCR'd.
