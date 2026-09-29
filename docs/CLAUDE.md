@@ -70,6 +70,7 @@ src/
     api/
       me/route.ts             GET current user, workspace, Pro, free allowance, terms status
       me/terms/route.ts       POST accept current Terms version
+      me/delete/route.ts      POST delete own account (confirm: "DELETE")
       review/route.ts         POST run a check (auth, terms, free-tier claim, Claude, save)
       extract/route.ts        POST one file → text (auth required)
       reviews/route.ts        GET history list (RLS read)
@@ -120,7 +121,7 @@ supabase/
   migrations/0003_team_seats.sql
   migrations/0004_ocr_cap_and_minimisation.sql
   tests/auth_shim.sql         Fake auth schema + roles for local Postgres
-  tests/0001_rls_test.sql, tests/0002_reminders_test.sql, tests/0003_teams_test.sql, tests/0004_ocr_test.sql
+  tests/0001_rls_test.sql, tests/0002_reminders_test.sql, tests/0003_teams_test.sql, tests/0004_ocr_test.sql, tests/0005_account_deletion_test.sql
 vercel.json                   Daily cron for /api/cron/reminders
 scripts/test-db.sh
 tests/*.test.ts
@@ -226,7 +227,7 @@ Files are processed in memory and never persisted. The client continues past a f
 4. **In-memory rate limits** (per-user hourly, extract) reset on cold start. The free tier itself is durable.
 5. ~~**Refresh loses a check in progress**~~ Fixed: `lib/draft.ts` keeps the draft in sessionStorage (cleared on logout and when the tab closes).
 6. ~~**Markdown renderer** doesn't render lists~~ Fixed: `lib/reviewMarkdown.ts` parses headings, lists, bold, rules and suggested wording (no links/HTML, by design).
-7. **Account deletion** is by email request (privacy policy). No self-service button.
+7. ~~**Account deletion** by email only~~ Fixed: account menu → Delete my account (`api/me/delete`). Blocked while the user has an active subscription or owns a team with other members; team deadlines are re-routed first; the free-tier ledger is kept.
 8. **Supabase auth emails** need custom SMTP in production; the default sender is heavily rate-limited.
 9. Git history shows many wholesale "Restore page" overwrites of the old `page.tsx`. Keep edits to `HomeClient.tsx` surgical.
 10. **Extraction quality is unmeasured.** Tests cover shape and safety, not recall/precision on real contracts. Build an eval before relying on it in marketing.

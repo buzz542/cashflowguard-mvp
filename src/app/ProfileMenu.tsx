@@ -13,7 +13,8 @@ export function ProfileMenu({
   onViewDeadlines,
   onToggleReminders,
   onSwitchWorkspace,
-  onOpenTeam
+  onOpenTeam,
+  onDeleteAccount
 }: {
   me: Me;
   onLogout: () => void;
@@ -25,6 +26,7 @@ export function ProfileMenu({
   onToggleReminders?: (on: boolean) => void;
   onSwitchWorkspace?: (workspaceId: string) => void;
   onOpenTeam?: () => void;
+  onDeleteAccount?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -177,6 +179,15 @@ export function ProfileMenu({
           >
             Log out
           </button>
+          {onDeleteAccount && (
+            <button
+              type="button"
+              onClick={() => { setOpen(false); onDeleteAccount(); }}
+              className="w-full text-left text-xs text-gray-500 py-2 px-1 rounded-lg hover:bg-gray-50"
+            >
+              Delete my account
+            </button>
+          )}
         </div>
       )}
     </div>

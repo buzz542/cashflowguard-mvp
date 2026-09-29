@@ -287,6 +287,33 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
     setStep("landing");
   };
 
+  const deleteAccount = async () => {
+    const typed = window.prompt(
+      "This permanently deletes your account, your personal reviews and tracked deadlines, and any teams you own. Type DELETE to confirm."
+    );
+    if (typed !== "DELETE") return;
+    const res = await fetch("/api/me/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: "DELETE" })
+    });
+    const data = await readJson<{ ok: boolean }>(res);
+    if (!res.ok) {
+      setBanner(data.error || "Could not delete your account.");
+      return;
+    }
+    try {
+      sessionStorage.removeItem(DRAFT_KEY);
+    } catch {
+      /* ignore */
+    }
+    await getSupabaseBrowser()?.auth.signOut();
+    setMe((m) => (m ? { accountsEnabled: m.accountsEnabled, termsVersion: m.termsVersion, user: null } : m));
+    setView("marketing");
+    setStep("landing");
+    setBanner("Your account has been deleted.");
+  };
+
   const startCheckout = async () => {
     setCheckoutLoading(true);
     setSubscribeError("");
@@ -568,6 +595,7 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
               onToggleReminders={me.canTrackDeadlines ? toggleReminderEmails : undefined}
               onSwitchWorkspace={switchWorkspace}
               onOpenTeam={() => { setView("app"); setStep("team"); }}
+              onDeleteAccount={deleteAccount}
             />
           ) : (
             <button type="button" onClick={() => setAuthMode("login")} className="text-sm text-gray-600">Log in</button>

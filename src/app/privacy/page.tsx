@@ -113,7 +113,10 @@ export default function PrivacyPage() {
         <p>
           Uploaded files and the full contract text are processed in memory for the request and are not stored by us.
           Your review history (as described above) is kept until you delete it, which you can do for each review in the
-          app, or until you ask us to delete your account. Your account is kept until you ask us to delete it. Hashed IP
+          app, or until you delete your account (account menu → Delete my account) or ask us to. Deleting your
+          account removes your profile, personal reviews, tracked deadlines and any teams you own. We keep the
+          normalised email and count used for the free-tier limit, so the free check can&apos;t be reset by
+          re-registering, and Stripe keeps billing records as the law requires. Hashed IP
           addresses used for free-tier limits are deleted after 2 days. Stripe retains payment records per their
           policies. Server logs are kept for a limited period for security.
         </p>
