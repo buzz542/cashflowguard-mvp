@@ -1,20 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { rateLimit, clientIp } from "@/lib/rateLimit";
 
-// Must be dynamic — uses searchParams and Stripe at request time
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   try {
+    const ip = clientIp(req);
+    const rl = rateLimit(`verify:${ip}`, 30, 60_000);
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "Too many requests." },
+        { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } }
+      );
+    }
+
     const secret = process.env.STRIPE_SECRET_KEY;
     if (!secret) {
-      return NextResponse.json({ error: "STRIPE_SECRET_KEY not set" }, { status: 500 });
+      return NextResponse.json({ error: "Billing not configured." }, { status: 500 });
     }
 
     const sessionId = req.nextUrl.searchParams.get("session_id");
-    if (!sessionId) {
-      return NextResponse.json({ error: "Missing session_id" }, { status: 400 });
+    if (!sessionId || !sessionId.startsWith("cs_") || sessionId.length > 200) {
+      return NextResponse.json({ error: "Invalid session." }, { status: 400 });
     }
 
     const stripe = new Stripe(secret);
@@ -25,17 +34,11 @@ export async function GET(req: NextRequest) {
       session.status === "complete";
 
     return NextResponse.json({
-      paid,
-      status: session.status,
-      payment_status: session.payment_status,
-      customer_email: session.customer_details?.email || session.customer_email || null,
-      mode: session.mode
+      paid: !!paid,
+      customer_email: session.customer_details?.email || session.customer_email || null
     });
-  } catch (error: any) {
-    console.error("Checkout verify error:", error);
-    return NextResponse.json(
-      { error: error.message || "Verify failed" },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    console.error("Verify error:", error);
+    return NextResponse.json({ error: "Could not verify payment." }, { status: 500 });
   }
 }

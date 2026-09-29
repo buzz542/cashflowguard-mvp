@@ -1,32 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { rateLimit, clientIp } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = clientIp(req);
+    const rl = rateLimit(`checkout:${ip}`, 10, 60_000);
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "Too many requests. Try again shortly." },
+        { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } }
+      );
+    }
+
     const secret = process.env.STRIPE_SECRET_KEY;
     if (!secret) {
-      return NextResponse.json(
-        { error: "STRIPE_SECRET_KEY is not set in Vercel Environment Variables." },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "Payments are not configured." }, { status: 500 });
     }
 
     const priceId = process.env.STRIPE_PRICE_ID;
     if (!priceId) {
-      return NextResponse.json(
-        { error: "STRIPE_PRICE_ID is not set. Add the Pro price ID in Vercel." },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "Payments are not configured." }, { status: 500 });
     }
 
     const body = await req.json().catch(() => ({}));
-    const email = typeof body.email === "string" ? body.email : undefined;
+    const email = typeof body.email === "string" ? body.email.toLowerCase().trim() : undefined;
+    if (email && (email.length > 254 || !email.includes("@"))) {
+      return NextResponse.json({ error: "Invalid email." }, { status: 400 });
+    }
 
     const stripe = new Stripe(secret);
-
     const origin =
       req.headers.get("origin") ||
       process.env.NEXT_PUBLIC_APP_URL ||
@@ -46,15 +52,12 @@ export async function POST(req: NextRequest) {
     });
 
     if (!session.url) {
-      return NextResponse.json({ error: "No checkout URL returned" }, { status: 500 });
+      return NextResponse.json({ error: "Checkout unavailable." }, { status: 500 });
     }
 
     return NextResponse.json({ url: session.url, sessionId: session.id });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Checkout error:", error);
-    return NextResponse.json(
-      { error: error.message || "Checkout failed" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Checkout failed. Please try again." }, { status: 500 });
   }
 }
