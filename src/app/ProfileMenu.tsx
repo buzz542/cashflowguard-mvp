@@ -1,64 +1,26 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-
-export type User = {
-  email: string;
-  passwordHash: string;
-  freeUsed: boolean;
-  isPro?: boolean;
-  name?: string;
-};
-
-export type SavedReview = {
-  id: string;
-  createdAt: string;
-  trade: string;
-  role: string;
-  preview: string;
-  result: string;
-};
-
-export function withEntitlements(u: User): User {
-  const email = (u.email || "").toLowerCase().trim();
-  return { ...u, email, name: u.name || email.split("@")[0] };
-}
-
-export function loadReviews(email: string): SavedReview[] {
-  try {
-    const raw = localStorage.getItem("gc_reviews_" + email.toLowerCase());
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as SavedReview[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-export function saveReview(email: string, review: SavedReview) {
-  const list = loadReviews(email);
-  const next = [review, ...list.filter((r) => r.id !== review.id)].slice(0, 30);
-  localStorage.setItem("gc_reviews_" + email.toLowerCase(), JSON.stringify(next));
-  return next;
-}
+import type { Me, ReviewSummary } from "@/lib/clientTypes";
 
 export function ProfileMenu({
-  user,
+  me,
   onLogout,
   onManageBilling,
   reviews = [],
   onOpenReview,
   onViewAllReviews
 }: {
-  user: User;
+  me: Me;
   onLogout: () => void;
   onManageBilling?: () => void;
-  reviews?: SavedReview[];
-  onOpenReview?: (review: SavedReview) => void;
+  reviews?: ReviewSummary[];
+  onOpenReview?: (id: string) => void;
   onViewAllReviews?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const user = me.user!;
   const initial = (user.name || user.email || "?").charAt(0).toUpperCase();
 
   useEffect(() => {
@@ -81,11 +43,9 @@ export function ProfileMenu({
           {initial}
         </span>
         <span className="flex flex-col items-start leading-tight">
-          <span className="text-xs font-semibold text-gray-900 max-w-[100px] truncate">
-            {user.name || "Account"}
-          </span>
-          <span className={`text-[10px] font-semibold ${user.isPro ? "text-blue-600" : "text-gray-500"}`}>
-            {user.isPro ? "Pro" : "Free"}
+          <span className="text-xs font-semibold text-gray-900 max-w-[100px] truncate">{user.name || "Account"}</span>
+          <span className={`text-[10px] font-semibold ${me.isPro ? "text-blue-600" : "text-gray-500"}`}>
+            {me.isPro ? "Pro" : "Free"}
           </span>
         </span>
       </button>
@@ -107,17 +67,23 @@ export function ProfileMenu({
               <span className="text-gray-500">Plan</span>
               <span
                 className={`font-semibold px-2 py-0.5 rounded-full text-xs ${
-                  user.isPro ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-700"
+                  me.isPro ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-700"
                 }`}
               >
-                {user.isPro ? "Pro" : "Free"}
+                {me.isPro ? "Pro" : "Free"}
               </span>
             </div>
+            {!me.isPro && me.free && (
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500">Free checks left</span>
+                <span className="text-xs font-semibold text-gray-700">{me.free.remaining}</span>
+              </div>
+            )}
           </div>
 
           <div className="py-3 border-b">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Past scans</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Past reviews</p>
               {onViewAllReviews && reviews.length > 0 && (
                 <button type="button" className="text-[10px] text-blue-600" onClick={() => { setOpen(false); onViewAllReviews(); }}>
                   View all
@@ -125,7 +91,7 @@ export function ProfileMenu({
               )}
             </div>
             {reviews.length === 0 ? (
-              <p className="text-xs text-gray-400">No scans on this device yet.</p>
+              <p className="text-xs text-gray-400">No reviews yet.</p>
             ) : (
               <ul className="space-y-1 max-h-36 overflow-y-auto">
                 {reviews.slice(0, 5).map((r) => (
@@ -133,12 +99,10 @@ export function ProfileMenu({
                     <button
                       type="button"
                       className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-gray-50"
-                      onClick={() => { setOpen(false); onOpenReview?.(r); }}
+                      onClick={() => { setOpen(false); onOpenReview?.(r.id); }}
                     >
                       <p className="text-xs font-medium text-gray-900 truncate">{r.trade || "Contract check"}</p>
-                      <p className="text-[10px] text-gray-500">
-                        {new Date(r.createdAt).toLocaleDateString("en-GB")}
-                      </p>
+                      <p className="text-[10px] text-gray-500">{new Date(r.created_at).toLocaleDateString("en-GB")}</p>
                     </button>
                   </li>
                 ))}

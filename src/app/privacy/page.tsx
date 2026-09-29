@@ -34,9 +34,16 @@ export default function PrivacyPage() {
 
         <h2 className="text-lg font-bold mt-8 mb-2">What we collect</h2>
         <ul className="list-disc pl-5 space-y-1">
-          <li>Account email and a password verifier stored on your device (we do not operate a central password database in this version).</li>
+          <li>Account details: your email address, and a password if you choose one (stored hashed by our login provider, never by us in plain text).</li>
           <li>Job context you enter (trade, package size band, duration, role).</li>
           <li>Contract documents, photos or text you upload for review.</li>
+          <li>
+            Your review history: the AI result for each check, the job context, and the first 120 characters of the
+            contract text. Results can quote contract wording, which may include names and addresses of the parties.
+          </li>
+          <li>
+            For free-tier limits: a normalised form of your email address and a one-way hash of your IP address.
+          </li>
           <li>Payment and subscription data processed by Stripe if you subscribe.</li>
           <li>Basic technical data (IP address, browser type) in server logs for security and rate limiting.</li>
         </ul>
@@ -44,6 +51,7 @@ export default function PrivacyPage() {
         <h2 className="text-lg font-bold mt-8 mb-2">How we use it</h2>
         <ul className="list-disc pl-5 space-y-1">
           <li>To run an automated contract risk summary and show results to you.</li>
+          <li>To keep your review history so you can see it on any device.</li>
           <li>To enforce free-tier limits and Pro subscriptions.</li>
           <li>To process payments and prevent abuse (rate limiting, fraud checks).</li>
           <li>To respond to support requests you send us.</li>
@@ -69,6 +77,9 @@ export default function PrivacyPage() {
             <strong>Stripe</strong> — subscription payments and billing portal.
           </li>
           <li>
+            <strong>Supabase</strong> — login and database (accounts, review history, subscription status).
+          </li>
+          <li>
             <strong>Vercel</strong> — website hosting and serverless infrastructure.
           </li>
         </ul>
@@ -77,17 +88,20 @@ export default function PrivacyPage() {
           publish (such as standard contractual clauses).
         </p>
 
-        <h2 className="text-lg font-bold mt-8 mb-2">Cookies and local storage</h2>
+        <h2 className="text-lg font-bold mt-8 mb-2">Cookies</h2>
         <p>
-          We do not use advertising or analytics cookies. We use browser <strong>local storage</strong> on your device
-          to keep you signed in and remember free-tier usage. You can clear this in your browser settings.
+          We do not use advertising or analytics cookies. We use strictly necessary cookies to keep you signed in.
+          Older versions of the app stored your account on your device; the app now removes that data automatically
+          and offers to move any saved reviews into your account.
         </p>
 
         <h2 className="text-lg font-bold mt-8 mb-2">Retention</h2>
         <p>
-          Uploaded files are processed in memory for the request and are not intentionally stored by us in a file
-          database. Account data held in your browser remains until you log out or clear site data. Stripe retains
-          payment records per their policies. Server logs are kept for a limited period for security.
+          Uploaded files and the full contract text are processed in memory for the request and are not stored by us.
+          Your review history (as described above) is kept until you delete it, which you can do for each review in the
+          app, or until you ask us to delete your account. Your account is kept until you ask us to delete it. Hashed IP
+          addresses used for free-tier limits are deleted after 2 days. Stripe retains payment records per their
+          policies. Server logs are kept for a limited period for security.
         </p>
 
         <h2 className="text-lg font-bold mt-8 mb-2">Your rights</h2>

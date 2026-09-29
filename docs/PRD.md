@@ -1,6 +1,6 @@
-# GuardConstruct: Product Requirements (as-built reconstruction)
+# GuardConstruct: Product Requirements (as built)
 
-Reconstructed from the code at commit `6d38a3a` (29 Sep 2026). This describes what the product **does today**, not what it should do. Where the code, marketing copy and legal pages disagree, the conflict is listed under Open Questions rather than resolved by guessing.
+Originally reconstructed from the code at commit `6d38a3a` (29 Sep 2026), then kept in step with the roadmap build (Phases 0 to 3, see §9). This describes what the product **does**, not what it should do. Where the code, marketing copy and legal pages disagree, or a product decision was never made, it's listed under Open Questions. Where a default had to be shipped to build a feature, that's marked **Default shipped** and is still your call.
 
 ## 1. One-liner
 
@@ -20,17 +20,18 @@ From the landing page, metadata and system prompt:
 ## 3. Core user journey (live)
 
 1. Land on marketing page → "Check a document: free first pass".
-2. Create account (email + password, min 8 chars). No email verification.
-3. **About this job** form, all required:
+2. Create account: email + password or emailed login link. Must tick "I agree to the Terms … not legal advice". Must confirm email before the first check.
+3. If the account predates the current Terms version, a **Terms gate** ("Before you check a contract / Not legal advice") must be accepted before any check. Enforced server-side too.
+4. **About this job** form, all required:
    - Trade / work (free text)
    - Package size: Under £10k / £10k–£50k / £50k–£250k / £250k+
    - Duration: <1 month / 1–3 / 3–6 / 6+ months
    - Role: Subcontractor / Sub-subcontractor / Direct to client / Freelance / labour-only
-4. **Add the document**: take photo(s), upload PDF/Word/text (multiple files), or paste text. Extracted text lands in an editable textarea.
-5. **Run check** → loading screen "Building your action plan…".
-6. **Your action plan** rendered with "Not legal advice" and "Automated AI summary" banners.
-7. Review auto-saved to "Past contract reviews" on this device.
-8. If the free check is used, next attempt shows "Upgrade to Pro" modal → Stripe Checkout.
+5. **Add the document**: take photo(s), upload PDF/Word/text (multiple files), or paste text. Extracted text lands in an editable textarea. A failed page no longer discards the pages that worked.
+6. **Run check** → loading screen "Building your action plan…".
+7. **Your action plan** rendered with "Not legal advice" and "Automated AI summary" banners.
+8. Review saved to the account ("Past contract reviews"), visible on any device.
+9. If the free allowance is used, next attempt shows "Upgrade to Pro" modal → Stripe Checkout.
 
 ## 4. Feature inventory
 
@@ -38,50 +39,47 @@ From the landing page, metadata and system prompt:
 
 | Feature | Details | Where |
 |---|---|---|
-| Marketing page | Hero, "How it works" (3 steps), Features, Pricing, Roadmap, footer with Privacy/Terms/Report a problem | `page.tsx` |
-| Account signup / login | Email + password, stored **in the browser only** | `page.tsx`, `lib/password.ts` |
-| Job context capture | 4 fields above; used by the model to weight severity and estimate exposure, never echoed back | `page.tsx`, `api/review` |
-| Photo upload + OCR | Camera capture on mobile, Claude vision transcription. JPEG/PNG/GIF/WebP. HEIC rejected | `api/extract` |
+| Marketing page | Hero, "How it works", Features, Pricing, Roadmap, footer with Privacy/Terms/Report a problem. Free-tier line reads the real server limit | `page.tsx`, `HomeClient.tsx` |
+| Accounts | Supabase Auth: email + password or magic link, email confirmation required, session cookies | `AuthModal.tsx`, `auth/callback`, `middleware.ts` |
+| Terms acceptance | Checkbox at signup + Terms gate before first check; stored per user with version; server refuses checks without it | `AuthModal.tsx`, `api/me/terms`, `api/review` |
+| Job context capture | 4 fields; used to weight severity and estimate exposure, never echoed back | `HomeClient.tsx`, `api/review` |
+| Photo upload + OCR | Camera capture on mobile, Claude vision transcription. JPEG/PNG/GIF/WebP. HEIC rejected. Requires login | `api/extract` |
 | PDF upload | Text-layer PDFs only. Scanned PDFs rejected with "photograph each page" | `api/extract` |
 | Word upload | `.docx` only; `.doc` rejected | `api/extract` |
-| Paste / text upload | `.txt`, `.md`, `.csv` or paste into textarea | `page.tsx`, `api/extract` |
-| Multi-page | Up to 12 files per selection, can add more batches; text concatenated. Max 120k chars total | `page.tsx`, `api/review` |
-| AI contract review | Claude (`claude-sonnet-4-5`) with a fixed system prompt covering Construction Act 1996, JCT, NEC3/4, FIDIC, bespoke forms | `api/review` |
-| Risk watchlist | Pay-when-paid/pay-if-paid; payment cycles; retention (>5%, whole-project PC release); payment/pay-less notice traps; set-off; flow-down; LADs; variation/EOT notice conditions precedent; suspension rights; indemnity/insurance; "final and conclusive"; other conditions precedent | `api/review` prompt |
-| Action plan output | 🚨 Deal with before signing / 👀 Be aware of / ✅ Keep track of → 🔴 RED and 🟠 AMBER detailed risks (clause ref, what it says, plain English, why it matters, potential exposure £, what to do, suggested wording) → Your key actions (3–7) → Overall call: SIGN / ASK FIRST / DON'T SIGN YET | `api/review` prompt, `ReviewResults.tsx` |
-| Copy suggested wording | One-click copy button per suggested-wording block | `ReviewResults.tsx` |
-| AI / legal disclaimers | Red "Not legal advice" box + amber "Automated AI summary" box on every result | `page.tsx`, `ReviewResults.tsx` |
-| Past reviews (local) | Last 30 reviews per email, stored in this browser. List view + 5 most recent in profile menu | `ProfileMenu.tsx` |
-| Profile menu | Avatar initial, name, email, Free/Pro badge, past scans, Manage billing (Pro only), Log out | `ProfileMenu.tsx` |
-| Free tier | UI: 1 check per account. Server: 3 per IP per 24h for non-subscribers | `page.tsx`, `api/review` |
-| Pro subscription | £19/month via Stripe Checkout, promo codes allowed | `api/checkout` |
-| Post-checkout unlock | Verifies Checkout session, flips local account to Pro | `api/checkout/verify`, `page.tsx` |
-| Manage billing / cancel | Stripe hosted Customer Portal login (emailed code) | `NEXT_PUBLIC_STRIPE_PORTAL_LOGIN_URL` |
-| Privacy Policy, Terms of Use | Static pages, England & Wales, UK GDPR, dated 29 Sep 2026 | `privacy/`, `terms/` |
+| Paste / text upload | `.txt`, `.md`, `.csv` or paste into textarea | `HomeClient.tsx`, `api/extract` |
+| Multi-page | Up to 12 files per selection, more batches allowed; text concatenated. Max 120k chars total | `HomeClient.tsx`, `api/review` |
+| AI contract review | Claude, fixed system prompt (Construction Act 1996, JCT, NEC3/4, FIDIC, bespoke). Model from `ANTHROPIC_MODEL`, default `claude-sonnet-4-5` | `api/review`, `lib/reviewPrompt.ts` |
+| Risk watchlist | Pay-when-paid/pay-if-paid; payment cycles; retention; payment/pay-less notice traps; set-off; flow-down; LADs; variation/EOT notice conditions precedent; suspension rights; indemnity/insurance; "final and conclusive"; other conditions precedent | `lib/reviewPrompt.ts` |
+| Action plan output | 🚨 / 👀 / ✅ → 🔴 RED and 🟠 AMBER detailed risks → Your key actions → Overall call: SIGN / ASK FIRST / DON'T SIGN YET | `lib/reviewPrompt.ts`, `ReviewResults.tsx` |
+| Copy suggested wording | One-click copy per suggested-wording block | `ReviewResults.tsx` |
+| AI / legal disclaimers | Red "Not legal advice" + amber "Automated AI summary" on every result, including history | `HomeClient.tsx`, `ReviewResults.tsx` |
+| **Cloud review history** | Stored in Postgres per workspace. List (100 newest), open, delete. Stores result + job context + first 120 chars of contract; **not** the full contract | `api/reviews*`, `supabase/migrations/0001` |
+| Import device history | One-time import of reviews saved in the browser by the pre-accounts version (same email only), then removed from the device. Old password hashes are wiped from localStorage on load | `api/reviews/import`, `HomeClient.tsx` |
+| Profile menu | Name, email, Free/Pro badge, free checks left, last 5 reviews, Manage billing (workspace owner with a Stripe customer), Log out | `ProfileMenu.tsx` |
+| Free tier | Per person (canonical email: aliases share one), plus per-IP daily cap and a service-wide daily cap. Atomic in Postgres. Refunded if the AI call fails | `api/review`, `claim_free_review()` |
+| Pro subscription | £19/month via Stripe Checkout, promo codes allowed, one Stripe customer per workspace | `api/checkout` |
+| Subscription sync | Stripe webhook mirrors subscription status/seats/period into Postgres; return-from-checkout also syncs | `api/stripe/webhook`, `api/checkout/verify`, `lib/stripeSync.ts` |
+| Manage billing / cancel | Stripe Customer Portal for the signed-in owner's workspace | `api/portal` |
+| Complimentary Pro | `workspaces.comp_pro` flag, set by hand in SQL (founder, testers) | README |
+| Privacy Policy, Terms of Use | Updated for accounts, stored history, Supabase, fair use, free-tier rules | `privacy/`, `terms/` |
 | Report a problem | `mailto:` link to founder | footer |
-| Rate limiting | Per-IP, in-memory, best effort | `lib/rateLimit.ts` |
-| Security headers / CSP | Set globally | `next.config.mjs` |
+| Rate limiting | Free tier in Postgres (durable). Per-user hourly speed bumps in memory | `lib/rateLimit.ts`, `claim_free_review()` |
+| Security headers / CSP | Set globally; CSP allows the Supabase origin | `next.config.mjs` |
 
 ### 4.2 Roadmap only (advertised, no code)
 
-The landing page Roadmap section lists these with "→" (vs "✓ Live"). There is no schema, endpoint, stub or feature flag for any of them.
-
 | Item | What exists today | What's missing |
 |---|---|---|
-| **Cloud history across devices** | History in `localStorage` only, lost on a new device or when site data is cleared | Database, server-side accounts/sessions, review storage, data retention policy |
-| **Team seats for small firms** | Single-user local accounts; Stripe checkout hardcoded `quantity: 1` | Org/team model, invites, seat billing, shared history |
-| **Notice deadline reminders** | Model lists deadlines/notices under "✅ Keep track of" as free text | Structured extraction of dates/periods, job start date capture, storage, scheduler, email/SMS/push delivery |
-
-All three depend on a backend with real auth, which doesn't exist yet.
+| ~~Cloud history across devices~~ | **Live since Phase 1** | n/a |
+| **Team seats for small firms** | Data model is workspace-based and seat-aware (`workspaces`, `workspace_members`, `subscriptions.seat_count`, seat ranking in entitlements) but every user only has a personal workspace | Team workspaces, invites, seat billing, UI |
+| **Notice deadline reminders** | Model lists deadlines/notices under "✅ Keep track of" as free text | Structured extraction, job start/event dates, storage, scheduler, email delivery |
 
 ### 4.3 Implied or claimed but not really there
 
 | Claim | Reality |
 |---|---|
 | "Built around JCT / NEC style patterns" | True only at the prompt level. No form detection, clause library or JCT/NEC-specific logic. FIDIC is also in the prompt but not in marketing |
-| "Unlimited checks" (Pro) | Capped at 8 reviews/hour/IP by the server |
-| "Account" | Per-browser record. Same email on a new device is a new account with a new free check |
-| Email verification | Existed, removed on purpose (`aac72c7`) |
+| "Unlimited checks" (Pro) | 20 reviews per user per hour (configurable). Now disclosed as fair use in the Terms |
 | "Trusted by early UK contractors" | The section lists trade categories, not customers or logos. See Open Questions |
 
 ## 5. Pricing and entitlements (as built)
@@ -89,66 +87,76 @@ All three depend on a backend with real auth, which doesn't exist yet.
 | | Free | Pro |
 |---|---|---|
 | Price | £0 | £19/month (hardcoded in UI; actual charge is whatever `STRIPE_PRICE_ID` is) |
-| Checks | UI: 1 per local account. Server: 3/IP/24h | Server: 8/IP/hour |
-| Upload/OCR | Unmetered by plan (20 files/IP/hour) | Same |
-| History | Local, 30 most recent | Same |
-| Billing mgmt | n/a | Stripe portal |
+| Checks | `FREE_REVIEW_LIMIT` per person, lifetime (default **1**). Also max `FREE_REVIEWS_PER_IP_PER_DAY` (default 3) and service-wide `FREE_REVIEWS_GLOBAL_PER_DAY` (default 200) | Unlimited, fair use (`REVIEWS_PER_USER_PER_HOUR`, default 20) |
+| Upload/OCR | Requires login; 30 files/user/hour; not counted against the free allowance | Same |
+| History | Account, any device | Same |
+| Billing mgmt | n/a | Stripe portal (workspace owner) |
 
-Server decides Pro by looking up the email (sent by the client) in Stripe for an `active` or `trialing` subscription on every review. There are no webhooks.
+The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe webhook, or `workspaces.comp_pro`), for the signed-in user's workspace. Nothing the browser sends can make someone Pro.
 
 ## 6. Non-functional (as built)
 
-- **Platform**: Next.js 14 on Vercel, Node 20. Single route (`/`) plus `/privacy`, `/terms`.
-- **Data storage**: none server-side. Uploaded files are processed in memory and dropped. Contract text and results are sent to Anthropic.
-- **Third parties**: Anthropic (AI), Stripe (billing), Vercel (hosting).
-- **Cost**: README says "typically 5p–20p per review". Not verified; photo OCR adds one Claude vision call per page on top.
-- **Latency**: non-streaming, up to 8k output tokens, 60s function limit.
+- **Platform**: Next.js 14 on Vercel, **Node 22** (Node 20 is end-of-life and current Supabase/vitest need 22). Routes: `/`, `/privacy`, `/terms`, `/auth/callback`.
+- **Data storage**: Supabase Postgres (accounts, workspaces, subscriptions, review results, free-tier ledger). Uploaded files and full contract text are processed in memory and not stored. Contract text is sent to Anthropic.
+- **Third parties**: Anthropic (AI), Stripe (billing), Supabase (auth + database), Vercel (hosting).
+- **Cost controls**: free checks capped per person, per IP and globally per day. At the README's 5p to 20p per review, the default global cap bounds free spend at roughly £10 to £40/day (not re-measured).
+- **Latency**: non-streaming, up to 8k output tokens, 60s function limit; SDK timeout 55s with one retry.
+- **Tests**: unit tests (vitest), SQL/RLS tests against a local Postgres (`npm run test:db`), typecheck, build.
 - **Accessibility / i18n**: `en-GB`, British English throughout. No specific a11y work beyond semantic buttons.
 
 ## 7. Known issues that affect the product (details in `docs/CLAUDE.md`)
 
-- ~~Anyone can open any subscriber's Stripe billing portal by email.~~ Fixed in Phase 0 (hosted portal login link).
-- Anyone can claim Pro on the review endpoint by sending a subscriber's email.
+- ~~Anyone can open any subscriber's Stripe billing portal by email.~~ Fixed (Phase 0, then authenticated portal in Phase 1).
+- ~~Anyone can claim Pro on the review endpoint by sending a subscriber's email.~~ Fixed in Phase 1.
 - ~~Founder email logs in with any password client-side.~~ Fixed in Phase 0.
-- Cancelled Pro users still see "Pro" in the UI but get free-tier limits from the server.
-- Photos/PDFs over ~4.5MB likely fail on Vercel despite the "max 12MB" message.
+- ~~Cancelled Pro users still see "Pro".~~ Fixed in Phase 1 (webhook + server-side entitlement).
+- ~~Free tier resettable by clearing the browser or using a new email alias.~~ Fixed in Phase 1.
+- Photos/PDFs over ~4.5MB likely fail on Vercel despite the "max 12MB" message. The client now shows a clear "too large" error for a 413, but the limit itself is unchanged.
 - Scanned PDFs are rejected instead of OCR'd.
-- Refresh/back mid-flow loses progress.
+- Refresh/back mid-flow loses the check in progress (saved reviews are safe).
+- Email confirmation is now required before the first free check: more friction between landing and first value.
 
 ## 8. Open questions
 
-These are ambiguous in the code or contradict each other. Not assumed either way.
-
 **Free tier and pricing**
-1. What is the intended free allowance: 1 check per person ever (UI copy), 1 per account (Terms), or 3 per day per IP (server)?
-2. Should document extraction (especially paid photo OCR) count against the free allowance or be gated at all?
-3. Is "Unlimited" for Pro meant literally, or is a fair-use cap intended? If a cap, should the 8/hour limit be stated?
-4. Is £19/month inclusive of VAT? Nothing in UI, Terms or checkout config says. Is there an annual plan or a trial? (Server accepts `trialing` status but checkout doesn't configure a trial.)
-5. Are promo codes intentionally enabled at checkout (`allow_promotion_codes: true`)?
+1. What is the intended free allowance? **Default shipped:** 1 per person (canonical email), lifetime, plus 3/IP/day and 200/day service-wide. All env-configurable.
+2. Should document extraction (photo OCR) count against the free allowance? **Default shipped:** requires login, rate-limited, not counted.
+3. Is "Unlimited" for Pro meant literally? **Default shipped:** unlimited with a fair-use cap of 20/hour, disclosed in the Terms.
+4. Is £19/month inclusive of VAT? Is there an annual plan or a trial? (Server accepts `trialing`; checkout doesn't configure a trial.)
+5. Are promo codes intentionally enabled at checkout (`allow_promotion_codes: true`)? Left on.
+6. Should `past_due` (card retry in progress) keep Pro? **Default shipped:** no, only `active`/`trialing` (same as before).
 
 **Accounts and identity**
-6. Is local-only auth a deliberate MVP choice or a stopgap? Every roadmap item needs server-side accounts. What's the planned auth provider, if any?
-7. Should the founder account be Pro on the server too (currently it isn't unless it has a real Stripe sub)? Should the any-password login for that email stay?
-8. Why was email verification removed (`aac72c7`: "no on-screen codes, no email verification")? Cost, deliverability, friction? Does it need to come back with server accounts?
+7. ~~Local-only auth~~: replaced by Supabase Auth in Phase 1.
+8. Founder Pro. **Default shipped:** `comp_pro` flag set by SQL. The any-password login was removed in Phase 0.
+9. ~~Email verification~~: back via Supabase confirmation (needs custom SMTP in production).
 
 **Scope of the review**
-9. Is FIDIC in scope? It's in the prompt but not in marketing.
-10. Is the product England & Wales only, or also Scotland (different law) and Northern Ireland? Copy says "UK" and "English law" interchangeably.
-11. Is "under 25 staff" enforced or checked anywhere, or purely positioning? (Currently positioning only.)
-12. Are main contractors or clients reviewing their own contracts an intended use? The role dropdown excludes them.
-13. What should happen with scanned PDFs: add OCR, or keep telling users to photograph pages?
+10. Is FIDIC in scope? It's in the prompt but not in marketing.
+11. Is the product England & Wales only, or also Scotland (different law) and Northern Ireland? Copy says "UK" and "English law" interchangeably.
+12. Is "under 25 staff" enforced anywhere? (Positioning only.)
+13. Are main contractors or clients reviewing their own contracts an intended use? The role dropdown excludes them.
+14. What should happen with scanned PDFs: add OCR, or keep telling users to photograph pages?
 
 **Roadmap definitions**
-14. Cloud history: how long should contract text and results be retained, and does the privacy policy need rewriting (it currently says files aren't stored)?
-15. Team seats: per-seat pricing or a flat team plan? Is there a seat cap given the <25 staff target?
-16. Notice reminders: which notices (payment applications, pay-less, variation/EOT, final account, retention release)? Delivery channel (email, SMS, calendar export)? Where does the job start date come from, since the context form only captures a duration band?
+15. Cloud history retention. **Default shipped:** kept until the user deletes it or asks for account deletion; full contract text never stored. Is a fixed retention period (e.g. 24 months inactive) wanted?
+16. Team seats: per-seat pricing or a flat team plan? Is there a seat cap given the <25 staff target?
+17. Notice reminders: which notices, which channels, and is it Pro-only?
 
 **Brand, domain and claims**
-17. Canonical domain: `guardconstruct.com` (code fallback, Stripe redirects) or `cashflowguard-mvp.vercel.app` (README)? Is "CashflowGuard" a retired name?
-18. "Trusted by early UK contractors": is there evidence of actual users from those trades? If not, this may be a problem under ASA/CAP rules on testimonials and endorsements.
-19. README says the model is "Claude Sonnet 5"; code uses `claude-sonnet-4-5`. Which is intended?
-20. "Past reviews" in the nav and "Past scans" in the profile menu refer to the same thing. Intentional?
+18. Canonical domain: `guardconstruct.com` (code fallback, Stripe redirects) or `cashflowguard-mvp.vercel.app`? Needed for auth and reminder email sending (DNS).
+19. "Trusted by early UK contractors": is there evidence of actual users from those trades? If not, this may be a problem under ASA/CAP rules on testimonials and endorsements.
+20. Model. **Default shipped:** unchanged `claude-sonnet-4-5`, now `ANTHROPIC_MODEL`. Newer models exist; switching changes cost and output and should be tested on real contracts first.
 
 **Legal/compliance**
-21. Privacy policy says Anthropic processes documents "solely" to extract text and summarise. Has the Anthropic data-retention/training position been checked and should it be stated?
-22. Terms cap liability at the greater of £50 or 3 months' fees. Has this been reviewed by anyone qualified, given the product itself says "not legal advice"?
+21. Privacy policy says Anthropic processes documents "solely" to extract text and summarise. Has Anthropic's commercial data-retention position been checked and should it be stated?
+22. Terms cap liability at the greater of £50 or 3 months' fees. Has this been reviewed by anyone qualified?
+23. Who is the data controller: a company or a sole trader? The privacy policy says "GuardConstruct (we)" without a legal entity or address.
+24. Supabase region: the privacy policy should name where data is hosted once the project is created.
+
+## 9. Build log
+
+| Phase | What shipped |
+|---|---|
+| 0 | Removed unauthenticated `/api/portal` and the founder any-password login |
+| 1 | Supabase accounts + email confirmation; Terms acceptance gate; workspace/subscription/review schema with RLS; Stripe webhook sync; authenticated checkout/portal; cloud history + device import; durable free-tier ledger with alias and IP protection; login required for uploads; legal pages updated; Node 22; tests |

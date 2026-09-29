@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import mammoth from "mammoth";
-import Anthropic from "@anthropic-ai/sdk";
-import { rateLimit, clientIp } from "@/lib/rateLimit";
+import { rateLimit } from "@/lib/rateLimit";
+import { requireUser } from "@/lib/session";
+import { getAnthropic, textFrom } from "@/lib/anthropic";
+import { config } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16,12 +18,11 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
 }
 
 async function extractImageText(buffer: Buffer, mimeType: string): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
+  const anthropic = getAnthropic();
+  if (!anthropic) {
     throw new Error("OCR_UNAVAILABLE");
   }
 
-  const anthropic = new Anthropic({ apiKey });
   const mediaType = (
     mimeType === "image/png" || mimeType === "image/gif" || mimeType === "image/webp"
       ? mimeType
@@ -31,7 +32,7 @@ async function extractImageText(buffer: Buffer, mimeType: string): Promise<strin
   const base64 = buffer.toString("base64");
 
   const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-5",
+    model: config.anthropicModel,
     max_tokens: 8000,
     messages: [
       {
@@ -55,21 +56,16 @@ async function extractImageText(buffer: Buffer, mimeType: string): Promise<strin
     ]
   });
 
-  let text = "";
-  if (Array.isArray(message.content)) {
-    for (const block of message.content) {
-      if (block.type === "text" && typeof block.text === "string") {
-        text += block.text;
-      }
-    }
-  }
-  return text.trim();
+  return textFrom(message);
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const ip = clientIp(req);
-    const rl = rateLimit(`extract:${ip}`, 20, 60 * 60 * 1000);
+    // Photo OCR is a paid AI call, so uploads need an account.
+    const auth = await requireUser();
+    if ("response" in auth) return auth.response;
+
+    const rl = rateLimit(`extract:${auth.user.id}`, 30, 60 * 60 * 1000);
     if (!rl.ok) {
       return NextResponse.json(
         { error: "Rate limit reached. Please try again later." },

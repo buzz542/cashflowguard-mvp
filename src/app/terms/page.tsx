@@ -45,16 +45,25 @@ export default function TermsPage() {
 
         <h2 className="text-lg font-bold mt-8 mb-2">4. Accounts and free tier</h2>
         <p>
-          You are responsible for activity under your account. The free tier is limited (including one free check per
-          account as presented in the product). We may change limits, refuse service, or suspend abuse.
+          You are responsible for activity under your account. The free tier is limited to the number of free checks
+          shown on our pricing page, per person. Email aliases of the same inbox count as one person. Free checks are
+          also limited per network per day, and we may pause free checks for everyone on a given day to protect the
+          service. We may change limits, refuse service, or suspend abuse.
         </p>
 
         <h2 className="text-lg font-bold mt-8 mb-2">5. Subscriptions and cancellation</h2>
         <p>
-          Pro is billed via Stripe at the price shown at checkout (currently £19/month unless stated otherwise). You
+          Pro is billed via Stripe at the price shown at checkout (currently £19/month unless stated otherwise). Pro
+          includes unlimited checks, subject to fair-use rate limits that stop automated or abusive use. You
           can manage or cancel your subscription through the <strong>Manage billing</strong> link in your profile
           (Stripe Customer Portal) or via Stripe&apos;s receipts. Cancellation stops future renewals; charges already
           taken are handled under Stripe&apos;s and applicable consumer rules.
+        </p>
+
+        <h2 className="text-lg font-bold mt-8 mb-2">5A. Your review history</h2>
+        <p>
+          We keep the results of your checks in your account so you can return to them. You can delete any review at
+          any time. See the Privacy Policy for what is stored and for how long.
         </p>
 
         <h2 className="text-lg font-bold mt-8 mb-2">6. Acceptable use</h2>

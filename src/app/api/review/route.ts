@@ -1,162 +1,89 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
-import { emailHasActivePro } from "@/lib/stripeSub";
+import { requireUser, loadWorkspaceContext, jsonError, ACTIVE_WORKSPACE_COOKIE } from "@/lib/session";
+import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { getAnthropic, textFrom } from "@/lib/anthropic";
+import { REVIEW_SYSTEM_PROMPT } from "@/lib/reviewPrompt";
+import { config, PROMPT_VERSION } from "@/lib/config";
+import { canonicalEmail } from "@/lib/canonicalEmail";
+import { hashIp } from "@/lib/ipHash";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const SYSTEM_PROMPT = `You are GuardConstruct's construction contract risk engine for small UK firms.
-
-You are NOT a solicitor and NOT a general legal chatbot. You are a commercial cash-flow protection tool for subcontractors, freelancers and specialist firms (typically under 25 staff) working under English law.
-
-Your job: turn a contract into an ACTION PLAN a builder, electrician, plumber or subcontractor can use before they sign.
-
-## Domain
-- Housing Grants, Construction and Regeneration Act 1996 (Construction Act)
-- JCT (including subcontracts), NEC3/NEC4, FIDIC (England use), and bespoke main-contractor forms
-- Payment, retention, variation, EOT, LAD, set-off, notice and indemnity patterns that hit small firms
-
-Read every document DEFENSIVELY for the user (usually the smaller party).
-
-## Watchlist (prioritise these)
-1. Pay-when-paid / pay-if-paid or payment conditional on the payer being paid
-2. Harsh or non-compliant payment cycles (due date, final date, long assessment)
-3. Retention % and release triggers (especially >5% or tied to whole-project PC)
-4. Payment notice / pay-less / application deadline traps
-5. Broad or cross-contract set-off
-6. Unfair flow-down of main-contract risk
-7. Excessive, uncapped or unbacked LADs relative to package size
-8. Strict variation / EOT notice conditions precedent (e.g. 5–7 days)
-9. Weak suspension rights on non-payment
-10. Unrealistic indemnity or insurance demands
-11. Vague valuation / "final and conclusive" language
-12. Other conditions precedent that can extinguish payment or claims
-
-Use pre-flight context (role, package value band, duration, trade) only to weight severity — never restate it in the output.
-
-## Hard rules
-- Do NOT give legal advice or claim to be a solicitor
-- Do NOT invent clauses, figures or page numbers not supported by the document
-- Do NOT guarantee outcomes or that money will be recovered
-- Do NOT invent financial losses — only quantify when the contract (or user value band) supports a clear figure
-- Prefer cautious language: "This may create a risk…", "The contract appears to…", "Consider asking…", "You may wish to have this reviewed by a qualified professional…"
-- British English. Plain site-speak. Phone-readable. Prefer fewer high-quality findings over a long list.
-
-## Output format (STRICT — follow exactly)
-
-Start immediately with:
-
-## Contract Action Plan
-
-### 🚨 Deal with before signing
-Bullet list of the most important issues the user should consider addressing before signing. Only items actually found. If none, write "Nothing critical identified that must be raised before signing — still read the amber points below."
-
-### 👀 Be aware of
-Important risks that may not need negotiation but the contractor should understand. Only from the contract. If none: "No additional awareness items beyond the action points above."
-
-### ✅ Keep track of
-Notices, deadlines, documents, applications or procedures the contractor must follow during the job or risk losing position/payment. Only from the contract. If none: "No specific tracking obligations stood out beyond normal good practice."
-
----
-
-## Detailed risks
-
-For EACH medium or high issue (skip trivial/clean items), use this exact structure:
-
-### 🔴 RED — [Short issue title]
-or
-### 🟠 AMBER — [Short issue title]
-
-**Clause / reference:** [Clause number, schedule, and page if available]
-**What the contract says:** [Short quotation or close paraphrase of the relevant wording — keep it tight]
-**In plain English:** [2–4 sentences a site manager would understand]
-**Why it matters:** [Cash-flow / commercial impact on the small firm]
-**Potential exposure:** [If the contract or user package band allows a figure — e.g. "Potential retention: £3,250 (5% of £65,000 package)". If not calculable: "Financial impact cannot be determined from the contract alone."]
-**What you can do about this:** [One clear action — clarify, challenge, negotiate, or track]
-**Suggested wording:**
-> [A short, professional paragraph the contractor can copy into an email or message to the other party. Practical, not solicitor-drafted.]
-
-Order RED first, then AMBER. Omit GREEN unless genuinely useful as a brief note.
-
----
-
-## Your key actions
-
-A numbered list of the 3–7 most important things the contractor should consider doing next, generated from THIS contract only (not a generic checklist).
-
-Example style:
-1. Clarify the payment withholding wording in clause X before you sign.
-2. Confirm when retention is released and whether it is tied to your package or the whole project.
-3. Diary the variation notice deadline in clause Y.
-
----
-
-## Overall call
-One line only:
-**SIGN** / **ASK FIRST** / **DON'T SIGN YET** — plus one short reason in plain English.
-
-End. No extra sections. No restating of user context. No long disclaimer (the product UI already shows one).
-`;
-
 const MAX_CONTRACT_CHARS = 120_000;
+
+const FREE_LIMIT_MESSAGES: Record<string, { status: number; error: string; code: string }> = {
+  user_limit: { status: 402, error: "You've used your free check. Upgrade to Pro for unlimited checks.", code: "upgrade_required" },
+  ip_limit: { status: 429, error: "Free check limit reached for this network today. Upgrade to Pro or try tomorrow.", code: "ip_limit" },
+  global_limit: { status: 503, error: "Free checks are paused for today because of demand. Upgrade to Pro or try again tomorrow.", code: "free_paused" }
+};
+
+function field(ctx: Record<string, unknown>, key: string, max: number): string {
+  const v = ctx[key];
+  return typeof v === "string" ? v.slice(0, max) : "";
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const ip = clientIp(req);
-    const rl = rateLimit(`review:${ip}`, 8, 60 * 60 * 1000);
+    const auth = await requireUser();
+    if ("response" in auth) return auth.response;
+    const { user, email } = auth;
+
+    const rl = rateLimit(`review:${user.id}`, config.reviewsPerUserPerHour, 60 * 60 * 1000);
     if (!rl.ok) {
       return NextResponse.json(
-        { error: "Rate limit reached. Please try again later." },
+        { error: "Too many checks in a short time. Please try again later." },
         { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } }
       );
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "Service temporarily unavailable." },
-        { status: 500 }
-      );
-    }
+    const anthropic = getAnthropic();
+    if (!anthropic) return jsonError(500, "Service temporarily unavailable.");
 
     const body = await req.json().catch(() => null);
-    if (!body || typeof body !== "object") {
-      return NextResponse.json({ error: "Invalid request." }, { status: 400 });
-    }
+    if (!body || typeof body !== "object") return jsonError(400, "Invalid request.");
 
     const contractText = typeof body.contractText === "string" ? body.contractText : "";
-    const email = typeof body.email === "string" ? body.email.toLowerCase().trim() : "";
-    const context = body.context && typeof body.context === "object" ? body.context : {};
-
-    if (!contractText.trim()) {
-      return NextResponse.json({ error: "No contract text provided." }, { status: 400 });
-    }
+    const context = body.context && typeof body.context === "object" ? (body.context as Record<string, unknown>) : {};
+    if (!contractText.trim()) return jsonError(400, "No contract text provided.");
     if (contractText.length > MAX_CONTRACT_CHARS) {
-      return NextResponse.json(
-        { error: "Document is too large. Upload fewer pages or a shorter extract." },
-        { status: 400 }
-      );
+      return jsonError(400, "Document is too large. Upload fewer pages or a shorter extract.");
     }
 
-    const isPro = email ? await emailHasActivePro(email) : false;
-    if (!isPro) {
-      const freeRl = rateLimit(`review-free:${ip}`, 3, 24 * 60 * 60 * 1000);
-      if (!freeRl.ok) {
-        return NextResponse.json(
-          { error: "Free limit reached for today. Upgrade to Pro for unlimited checks." },
-          { status: 429, headers: { "Retry-After": String(freeRl.retryAfterSec) } }
-        );
+    const ctx = await loadWorkspaceContext(user, email, req.cookies.get(ACTIVE_WORKSPACE_COOKIE)?.value);
+    if (!ctx.profile.termsAccepted) {
+      return jsonError(403, "Please accept the Terms before running a check.", "terms_required");
+    }
+
+    const admin = getSupabaseAdmin();
+
+    // Free tier: claim atomically before spending on the AI call; refund if the call fails.
+    let freeEventId: string | null = null;
+    if (!ctx.isPro) {
+      const canonical = canonicalEmail(email);
+      if (!canonical) return jsonError(400, "Your account email address isn't valid.");
+      const { data, error } = await admin.rpc("claim_free_review", {
+        p_canonical_email: canonical,
+        p_ip_hash: hashIp(clientIp(req)),
+        p_user_limit: config.freeReviewLimit,
+        p_ip_daily_limit: config.freeReviewsPerIpPerDay,
+        p_global_daily_limit: config.freeReviewsGlobalPerDay
+      });
+      if (error) throw new Error(`claim_free_review: ${error.message}`);
+      const claim = (Array.isArray(data) ? data[0] : data) as { status: string; event_id: string | null } | null;
+      if (!claim || claim.status !== "ok") {
+        const m = FREE_LIMIT_MESSAGES[claim?.status ?? "user_limit"] ?? FREE_LIMIT_MESSAGES.user_limit;
+        return jsonError(m.status, m.error, m.code);
       }
+      freeEventId = claim.event_id;
     }
 
-    const trade = typeof context.trade === "string" ? context.trade.slice(0, 120) : "";
-    const projectSize = typeof context.projectSize === "string" ? context.projectSize.slice(0, 80) : "";
-    const duration = typeof context.duration === "string" ? context.duration.slice(0, 80) : "";
-    const role = typeof context.role === "string" ? context.role.slice(0, 80) : "";
-
-    const anthropic = new Anthropic({ apiKey });
+    const trade = field(context, "trade", 120);
+    const projectSize = field(context, "projectSize", 80);
+    const duration = field(context, "duration", 80);
+    const role = field(context, "role", 80);
 
     const userMessage = `Pre-flight context (weight severity only; do not restate in output):
 - Trade: ${trade || "not provided"}
@@ -167,36 +94,56 @@ export async function POST(req: NextRequest) {
 DOCUMENT TO REVIEW:
 ${contractText}`;
 
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-5",
-      max_tokens: 8000,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userMessage }]
-    });
-
     let result = "";
-    if (Array.isArray(message.content)) {
-      for (const block of message.content) {
-        if (block.type === "text" && typeof block.text === "string") {
-          result += block.text;
-        }
-      }
+    try {
+      const message = await anthropic.messages.create({
+        model: config.anthropicModel,
+        max_tokens: 8000,
+        system: REVIEW_SYSTEM_PROMPT,
+        messages: [{ role: "user", content: userMessage }]
+      });
+      result = textFrom(message);
+    } catch (e) {
+      if (freeEventId) await admin.rpc("refund_free_review", { p_event_id: freeEventId });
+      throw e;
     }
 
     if (!result) {
-      result = "No text response was generated. Please try again.";
+      if (freeEventId) await admin.rpc("refund_free_review", { p_event_id: freeEventId });
+      return jsonError(502, "No response was generated. Please try again. This check was not counted.");
     }
 
     result = result
       .replace(/^\s*\*?\*?Project context used\*?\*?[\s\S]*?(?=##\s*Contract Action Plan|##\s*Executive|##\s*Risk|###\s*[🔴🟠🟢]|$)/i, "")
       .trim();
 
-    return NextResponse.json({ result, isPro });
+    const { data: saved, error: saveErr } = await admin
+      .from("reviews")
+      .insert({
+        workspace_id: ctx.workspace.id,
+        author_id: user.id,
+        trade: trade || null,
+        role: role || null,
+        project_size: projectSize || null,
+        duration: duration || null,
+        contract_preview: contractText.slice(0, 120),
+        result_md: result,
+        model: config.anthropicModel,
+        prompt_version: PROMPT_VERSION
+      })
+      .select("id, created_at")
+      .single();
+    // The user has paid for this result (in money or their free check): return it even if saving failed.
+    if (saveErr) console.error("Review save failed:", saveErr.message);
+
+    return NextResponse.json({
+      result,
+      isPro: ctx.isPro,
+      reviewId: saved?.id ?? null,
+      saved: !saveErr
+    });
   } catch (error: unknown) {
-    console.error("Review error:", error);
-    return NextResponse.json(
-      { error: "Review failed. Please try again." },
-      { status: 500 }
-    );
+    console.error("Review error:", error instanceof Error ? error.message : error);
+    return jsonError(500, "Review failed. Please try again.");
   }
 }
