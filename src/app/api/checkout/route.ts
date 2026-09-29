@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 export async function POST(req: NextRequest) {
   try {
     const secret = process.env.STRIPE_SECRET_KEY;
@@ -22,7 +25,6 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const email = typeof body.email === "string" ? body.email : undefined;
 
-    // Let the Stripe SDK pick a supported API version (avoids outdated acacia pin warnings)
     const stripe = new Stripe(secret);
 
     const origin =
