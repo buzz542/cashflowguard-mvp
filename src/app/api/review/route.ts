@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 const SYSTEM_PROMPT = `You are GuardConstruct's construction contract risk engine for small UK firms.
 
 You are NOT a solicitor and NOT a general legal chatbot. You are a commercial cash-flow protection tool for subcontractors, freelancers and specialist firms (typically under 25 staff) working under English law.
