@@ -11,7 +11,9 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:db": "./scripts/test-db.sh"
+    "test:db": "./scripts/test-db.sh",
+    "lint": "next lint",
+    "check": "npm run -s lint && npm run -s typecheck && npm test -s && npm run -s test:db && npm run -s build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.129.0",
@@ -30,6 +32,8 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.0.1",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.25",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",

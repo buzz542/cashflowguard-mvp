@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import ReviewResults from "./ReviewResults";
 import { ProfileMenu } from "./ProfileMenu";
 import { AuthModal, TermsGate } from "./AuthModal";
@@ -489,7 +490,7 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
         <button type="button" className="flex items-center gap-2 shrink-0" onClick={() => { setView("marketing"); setStep("landing"); }}>
-          <img src="/logo.svg" alt="GuardConstruct logo" className="h-8 w-auto" />
+          <Image src="/logo.svg" alt="GuardConstruct logo" width={46} height={32} className="h-8 w-auto" priority />
           <span className="font-bold hidden sm:inline">Guard<span className="text-blue-600">Construct</span></span>
         </button>
         <nav className="hidden md:flex items-center gap-5 text-sm text-gray-600">
