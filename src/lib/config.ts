@@ -32,17 +32,24 @@ export function loadConfig(env: Env = process.env) {
     /** Reviews per user per hour, Pro included. A speed bump, not a plan limit. */
     reviewsPerUserPerHour: readInt(env, "REVIEWS_PER_USER_PER_HOUR", 20, 1, 1000),
     /** Model for review + OCR. Kept at the model the app shipped with until you choose otherwise. */
-    anthropicModel: env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-4-5"
+    anthropicModel: env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-4-5",
+    /** Model for deadline extraction. Defaults to the review model. */
+    extractionModel: env.ANTHROPIC_EXTRACTION_MODEL?.trim() || env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-4-5",
+    /** Deadline extraction + reminders only for Pro. Set false to offer them on the free check too. */
+    remindersProOnly: readBool(env, "REMINDERS_PRO_ONLY", true)
   };
 }
 
 export const config = loadConfig();
 
 /** Bump when the Terms or Privacy Policy change materially; users must re-accept. */
-export const TERMS_VERSION = "2026-09-29.1";
+export const TERMS_VERSION = "2026-09-29.2";
 
 /** Bump when the review system prompt changes, so stored reviews record which one produced them. */
 export const PROMPT_VERSION = "2026-09-29.1";
+
+/** Bump when the deadline-extraction prompt or schema changes. */
+export const EXTRACTION_VERSION = "2026-09-29.1";
 
 export function appOrigin(req: Request): string {
   const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();

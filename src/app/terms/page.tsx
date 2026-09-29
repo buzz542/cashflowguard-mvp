@@ -66,6 +66,16 @@ export default function TermsPage() {
           any time. See the Privacy Policy for what is stored and for how long.
         </p>
 
+        <h2 className="text-lg font-bold mt-8 mb-2">5B. Deadline reminders</h2>
+        <p>
+          Where available, GuardConstruct can pick notice and payment deadlines out of a contract and email you before
+          them. Deadlines are identified by AI and <strong>may be wrong, incomplete or missing</strong>. Dates depend on
+          information you give us (such as when an event happened) and on how we count days, which we explain in the
+          app. You must check each deadline against the contract yourself. Reminders are a convenience only: we don&apos;t
+          guarantee that any reminder will be sent, arrive, or arrive on time, and you remain responsible for meeting
+          your contractual deadlines. The limits in section 8 apply.
+        </p>
+
         <h2 className="text-lg font-bold mt-8 mb-2">6. Acceptable use</h2>
         <ul className="list-disc pl-5 space-y-1">
           <li>No unlawful content, malware, or attempts to probe or overload the service.</li>

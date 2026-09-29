@@ -107,6 +107,22 @@ export async function loadWorkspaceContext(
   };
 }
 
+/** Pro status of a user in a specific workspace (used where there's no request context, e.g. cron). */
+export async function isUserProInWorkspace(workspaceId: string, userId: string): Promise<boolean> {
+  const admin = getSupabaseAdmin();
+  const [{ data: ws }, { data: sub }] = await Promise.all([
+    admin.from("workspaces").select("owner_id, comp_pro").eq("id", workspaceId).maybeSingle(),
+    admin.from("subscriptions").select("status, seat_count").eq("workspace_id", workspaceId).maybeSingle()
+  ]);
+  if (!ws) return false;
+  return isProInWorkspace({
+    compPro: ws.comp_pro as boolean,
+    subscriptionStatus: (sub?.status as string | null) ?? null,
+    seatCount: (sub?.seat_count as number | undefined) ?? 1,
+    memberRank: await rankInWorkspace(workspaceId, ws.owner_id as string, userId)
+  });
+}
+
 /** Owner is seat 0; everyone else by join date. Used to decide who is inside the paid seats. */
 async function rankInWorkspace(workspaceId: string, ownerId: string, userId: string): Promise<number> {
   if (userId === ownerId) return 0;

@@ -47,7 +47,11 @@ npm run build
 2. **Stripe**: create the Pro price (`STRIPE_PRICE_ID`). Add a webhook endpoint at
    `https://<domain>/api/stripe/webhook` for `checkout.session.completed` and `customer.subscription.*`, and put its
    signing secret in `STRIPE_WEBHOOK_SECRET`. Turn on the Customer Portal (Settings → Billing → Customer portal).
-3. **Vercel**: set every variable in `.env.example`. `NEXT_PUBLIC_*` values are baked in at build time, so redeploy after changing them.
+3. **Resend** (deadline reminder emails): verify your sending domain (SPF/DKIM DNS records), create an API key,
+   and set `RESEND_API_KEY` and `EMAIL_FROM`.
+4. **Vercel**: set every variable in `.env.example`, including a long random `CRON_SECRET`. `vercel.json` schedules
+   `/api/cron/reminders` daily at 06:00 UTC (7am in summer, 6am in winter UK time); Vercel sends `CRON_SECRET` with
+   each call. `NEXT_PUBLIC_*` values are baked in at build time, so redeploy after changing them.
 
 ### Complimentary Pro
 

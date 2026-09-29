@@ -3,6 +3,7 @@ import { createSupabaseServerClient, getSupabaseAdmin, supabaseConfigured } from
 import { loadWorkspaceContext, ACTIVE_WORKSPACE_COOKIE, jsonError } from "@/lib/session";
 import { canonicalEmail } from "@/lib/canonicalEmail";
 import { config, TERMS_VERSION } from "@/lib/config";
+import { remindersAllowed } from "@/lib/reminderScheduler";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,6 +21,8 @@ export async function GET(req: NextRequest) {
 
     const email = user.email.toLowerCase();
     const ctx = await loadWorkspaceContext(user, email, req.cookies.get(ACTIVE_WORKSPACE_COOKIE)?.value);
+
+    const { data: prefs } = await getSupabaseAdmin().from("profiles").select("reminder_emails").eq("id", user.id).maybeSingle();
 
     const canonical = canonicalEmail(email);
     let used = 0;
@@ -48,7 +51,9 @@ export async function GET(req: NextRequest) {
         ? { status: ctx.subscription.status, currentPeriodEnd: ctx.subscription.currentPeriodEnd, seatCount: ctx.subscription.seatCount }
         : null,
       canManageBilling: ctx.workspace.role === "owner" && !!ctx.subscription?.stripeCustomerId,
-      free: { limit: config.freeReviewLimit, used, remaining: Math.max(0, config.freeReviewLimit - used) }
+      free: { limit: config.freeReviewLimit, used, remaining: Math.max(0, config.freeReviewLimit - used) },
+      canTrackDeadlines: remindersAllowed(ctx.isPro),
+      reminderEmails: (prefs?.reminder_emails as boolean | undefined) ?? true
     });
   } catch (e) {
     console.error("me error:", e instanceof Error ? e.message : e);

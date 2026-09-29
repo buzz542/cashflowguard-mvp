@@ -44,6 +44,10 @@ export default function PrivacyPage() {
           <li>
             For free-tier limits: a normalised form of your email address and a one-way hash of your IP address.
           </li>
+          <li>
+            If you use deadline reminders: the deadlines picked out of your contract (including short quotes of the
+            relevant clauses), job names, dates you enter, and a record of reminder emails sent.
+          </li>
           <li>Payment and subscription data processed by Stripe if you subscribe.</li>
           <li>Basic technical data (IP address, browser type) in server logs for security and rate limiting.</li>
         </ul>
@@ -52,6 +56,7 @@ export default function PrivacyPage() {
         <ul className="list-disc pl-5 space-y-1">
           <li>To run an automated contract risk summary and show results to you.</li>
           <li>To keep your review history so you can see it on any device.</li>
+          <li>To send deadline reminder emails you have asked for. You can turn these off in the account menu.</li>
           <li>To enforce free-tier limits and Pro subscriptions.</li>
           <li>To process payments and prevent abuse (rate limiting, fraud checks).</li>
           <li>To respond to support requests you send us.</li>
@@ -81,6 +86,9 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong>Vercel</strong> — website hosting and serverless infrastructure.
+          </li>
+          <li>
+            <strong>Resend</strong> — sending deadline reminder emails.
           </li>
         </ul>
         <p className="mt-2">

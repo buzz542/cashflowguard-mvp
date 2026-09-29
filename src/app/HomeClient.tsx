@@ -5,10 +5,12 @@ import Link from "next/link";
 import ReviewResults from "./ReviewResults";
 import { ProfileMenu } from "./ProfileMenu";
 import { AuthModal, TermsGate } from "./AuthModal";
+import { DeadlinesPanel, DeadlinesView } from "./DeadlinesPanel";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
-import type { Me, ReviewSummary, ApiError } from "@/lib/clientTypes";
+import type { Me, ReviewSummary, ApiError, ObligationRow, JobRow } from "@/lib/clientTypes";
 
-type Step = "landing" | "context" | "upload" | "loading" | "results" | "history";
+type Step = "landing" | "context" | "upload" | "loading" | "results" | "history" | "deadlines";
+type Extraction = "ok" | "failed" | "not_run" | null;
 
 /** Pre-accounts, reviews lived in localStorage under this key. */
 const legacyReviewsKey = (email: string) => "gc_reviews_" + email.toLowerCase();
@@ -30,7 +32,7 @@ async function readJson<T>(res: Response): Promise<T & ApiError> {
   return (await res.json().catch(() => ({}))) as T & ApiError;
 }
 
-export default function HomeClient({ freeLimit }: { freeLimit: number }) {
+export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit: number; remindersProOnly: boolean }) {
   const [view, setView] = useState<"marketing" | "app">("marketing");
   const [me, setMe] = useState<Me | null>(null);
   const [reviews, setReviews] = useState<ReviewSummary[]>([]);
@@ -42,6 +44,11 @@ export default function HomeClient({ freeLimit }: { freeLimit: number }) {
   const [contractText, setContractText] = useState("");
   const [pages, setPages] = useState<string[]>([]);
   const [result, setResult] = useState("");
+  const [reviewId, setReviewId] = useState<string | null>(null);
+  const [reviewTrade, setReviewTrade] = useState("");
+  const [obligations, setObligations] = useState<ObligationRow[]>([]);
+  const [job, setJob] = useState<JobRow | null>(null);
+  const [extraction, setExtraction] = useState<Extraction>(null);
   const [error, setError] = useState("");
   const [banner, setBanner] = useState("");
   const [extracting, setExtracting] = useState(false);
@@ -253,14 +260,32 @@ export default function HomeClient({ freeLimit }: { freeLimit: number }) {
   const openReview = async (id: string) => {
     setError("");
     const res = await fetch("/api/reviews/" + encodeURIComponent(id), { cache: "no-store" });
-    const data = await readJson<{ review: { result_md: string } }>(res);
+    const data = await readJson<{
+      review: { id: string; result_md: string; trade: string | null; extraction_status: Extraction };
+      obligations: ObligationRow[];
+      job: JobRow | null;
+    }>(res);
     if (!res.ok || !data.review) {
       setBanner(data.error || "Could not open that review.");
       return;
     }
     setResult(data.review.result_md);
+    setReviewId(data.review.id);
+    setReviewTrade(data.review.trade || "");
+    setObligations(data.obligations ?? []);
+    setJob(data.job ?? null);
+    setExtraction(data.review.extraction_status ?? null);
     setView("app");
     setStep("results");
+  };
+
+  const toggleReminderEmails = async (on: boolean) => {
+    const res = await fetch("/api/me/preferences", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reminderEmails: on })
+    });
+    if (res.ok) setMe((m) => (m ? { ...m, reminderEmails: on } : m));
   };
 
   const deleteReview = async (id: string) => {
@@ -347,7 +372,13 @@ export default function HomeClient({ freeLimit }: { freeLimit: number }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ context, contractText })
       });
-      const data = await readJson<{ result: string; saved: boolean }>(res);
+      const data = await readJson<{
+        result: string;
+        saved: boolean;
+        reviewId: string | null;
+        obligations: ObligationRow[];
+        extraction: Extraction;
+      }>(res);
       if (!res.ok) {
         setStep("upload");
         if (data.code === "upgrade_required") return setShowSubscribe(true);
@@ -359,6 +390,11 @@ export default function HomeClient({ freeLimit }: { freeLimit: number }) {
         throw new Error(data.error || "Review failed");
       }
       setResult(data.result);
+      setReviewId(data.reviewId);
+      setReviewTrade(context.trade);
+      setObligations(data.obligations ?? []);
+      setJob(null);
+      setExtraction(data.extraction ?? null);
       if (!data.saved) setBanner("Your review is below, but we couldn't save it to your history. Copy anything you need.");
       setStep("results");
       void refreshMe();
@@ -386,6 +422,9 @@ export default function HomeClient({ freeLimit }: { freeLimit: number }) {
           <button type="button" className="hover:text-gray-900" onClick={() => scrollTo("features")}>Features</button>
           <button type="button" className="hover:text-gray-900" onClick={() => scrollTo("pricing")}>Pricing</button>
           <button type="button" className="hover:text-gray-900" onClick={openPastReviews}>Past reviews</button>
+          {user && (
+            <button type="button" className="hover:text-gray-900" onClick={() => { setView("app"); setStep("deadlines"); }}>Deadlines</button>
+          )}
           <button type="button" className="hover:text-gray-900" onClick={() => scrollTo("roadmap")}>Roadmap</button>
         </nav>
         <div className="flex items-center gap-2 sm:gap-3">
@@ -397,6 +436,8 @@ export default function HomeClient({ freeLimit }: { freeLimit: number }) {
               reviews={reviews}
               onOpenReview={openReview}
               onViewAllReviews={openPastReviews}
+              onViewDeadlines={() => { setView("app"); setStep("deadlines"); }}
+              onToggleReminders={me.canTrackDeadlines ? toggleReminderEmails : undefined}
             />
           ) : (
             <button type="button" onClick={() => setAuthMode("login")} className="text-sm text-gray-600">Log in</button>
@@ -530,6 +571,7 @@ export default function HomeClient({ freeLimit }: { freeLimit: number }) {
                 "Retention, pay-when-paid, notice deadlines, LADs and set-off flagged in plain English",
                 "Suggested wording you can copy into an email or message",
                 "Past contract reviews saved to your account, on any device",
+                `Email reminders before notice and payment deadlines${remindersProOnly ? " (Pro)" : ""}`,
                 "Photo, PDF and Word upload",
                 "Pro plan for unlimited checks"
               ].map((f) => (
@@ -573,8 +615,8 @@ export default function HomeClient({ freeLimit }: { freeLimit: number }) {
               <li className="bg-white border rounded-xl px-4 py-3">✓ Live: contract photo / PDF / Word checks</li>
               <li className="bg-white border rounded-xl px-4 py-3">✓ Live: action plan + suggested wording</li>
               <li className="bg-white border rounded-xl px-4 py-3">✓ Live: history across devices</li>
+              <li className="bg-white border rounded-xl px-4 py-3">✓ Live: notice deadline reminders</li>
               <li className="bg-white border rounded-xl px-4 py-3">→ Team seats for small firms</li>
-              <li className="bg-white border rounded-xl px-4 py-3">→ Notice deadline reminders</li>
             </ul>
           </div>
         </section>
@@ -620,9 +662,14 @@ export default function HomeClient({ freeLimit }: { freeLimit: number }) {
               <button type="button" onClick={openPastReviews} className="w-full border font-semibold py-3 rounded-xl text-sm">
                 Past contract reviews
               </button>
+              <button type="button" onClick={() => setStep("deadlines")} className="w-full border font-semibold py-3 rounded-xl text-sm">
+                Deadlines I&apos;m tracking
+              </button>
             </div>
           </div>
         )}
+
+        {step === "deadlines" && <DeadlinesView onBack={() => setStep("landing")} onOpenReview={openReview} />}
 
         {step === "history" && (
           <div className="bg-white rounded-2xl border p-5 space-y-4">
@@ -744,6 +791,17 @@ export default function HomeClient({ freeLimit }: { freeLimit: number }) {
             <div className="bg-white rounded-2xl border p-5">
               <ReviewResults result={result} />
             </div>
+            <DeadlinesPanel
+              reviewId={reviewId}
+              obligations={obligations}
+              job={job}
+              canTrack={!!me?.canTrackDeadlines}
+              extraction={extraction}
+              defaultJobName={reviewTrade || "Contract"}
+              onUpgrade={() => setShowSubscribe(true)}
+              onObligations={setObligations}
+              onJob={setJob}
+            />
             <button type="button" onClick={startCheck} className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl">
               Start another check →
             </button>

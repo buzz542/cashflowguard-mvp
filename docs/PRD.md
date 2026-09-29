@@ -31,7 +31,9 @@ From the landing page, metadata and system prompt:
 6. **Run check** → loading screen "Building your action plan…".
 7. **Your action plan** rendered with "Not legal advice" and "Automated AI summary" banners.
 8. Review saved to the account ("Past contract reviews"), visible on any device.
-9. If the free allowance is used, next attempt shows "Upgrade to Pro" modal → Stripe Checkout.
+9. **Deadlines found in this contract** (Pro): the notice/payment deadlines the AI picked out, each with its clause quote and how the date is worked out. The user names the job and picks the site's nation (for bank holidays), then confirms the ones they want reminders for, enters event dates where a deadline runs from an event, or sets a date themselves.
+10. Reminder emails arrive two working days before and on the day. All tracked deadlines are listed under **Deadlines**.
+11. If the free allowance is used, next attempt shows "Upgrade to Pro" modal → Stripe Checkout.
 
 ## 4. Feature inventory
 
@@ -61,6 +63,13 @@ From the landing page, metadata and system prompt:
 | Subscription sync | Stripe webhook mirrors subscription status/seats/period into Postgres; return-from-checkout also syncs | `api/stripe/webhook`, `api/checkout/verify`, `lib/stripeSync.ts` |
 | Manage billing / cancel | Stripe Customer Portal for the signed-in owner's workspace | `api/portal` |
 | Complimentary Pro | `workspaces.comp_pro` flag, set by hand in SQL (founder, testers) | README |
+| **Deadline extraction** | Second Claude call (structured output) alongside the review; up to 25 deadlines with kind, clause, quote, and trigger (fixed date / monthly / N days before or after an event). Anything without a clear period is dropped, never guessed. Pro-only by default | `lib/extractObligations.ts`, `lib/obligations.ts` |
+| **Job tracking** | Name + nation (England & Wales / Scotland / NI) per tracked contract | `api/jobs`, `DeadlinesPanel.tsx` |
+| **Confirm / dismiss / date** | Nothing is scheduled until the user confirms it. Event-based deadlines need the event date; any date can be overridden by hand | `api/obligations/[id]` |
+| **Date rules** | Calendar or working days as the contract says; if it doesn't say, the earlier of the two. Working days skip weekends and that nation's bank holidays (gov.uk feed, rule-based fallback). Monthly deadlines roll forward | `lib/deadlines.ts`, `lib/bankHolidays.ts` |
+| **Reminder emails** | Daily cron; one digest per person; 2 working days before + on the day; late confirmations get the heads-up immediately. Stops if Pro lapses, the deadline is dismissed, or the user opts out | `api/cron/reminders`, `claim_due_reminders()` |
+| **Deadlines view** | All confirmed deadlines: needs a date / coming up / passed | `DeadlinesView` |
+| **Reminder opt-out** | Toggle in the account menu | `api/me/preferences` |
 | Privacy Policy, Terms of Use | Updated for accounts, stored history, Supabase, fair use, free-tier rules | `privacy/`, `terms/` |
 | Report a problem | `mailto:` link to founder | footer |
 | Rate limiting | Free tier in Postgres (durable). Per-user hourly speed bumps in memory | `lib/rateLimit.ts`, `claim_free_review()` |
@@ -72,7 +81,7 @@ From the landing page, metadata and system prompt:
 |---|---|---|
 | ~~Cloud history across devices~~ | **Live since Phase 1** | n/a |
 | **Team seats for small firms** | Data model is workspace-based and seat-aware (`workspaces`, `workspace_members`, `subscriptions.seat_count`, seat ranking in entitlements) but every user only has a personal workspace | Team workspaces, invites, seat billing, UI |
-| **Notice deadline reminders** | Model lists deadlines/notices under "✅ Keep track of" as free text | Structured extraction, job start/event dates, storage, scheduler, email delivery |
+| ~~Notice deadline reminders~~ | **Live since Phase 2** | n/a |
 
 ### 4.3 Implied or claimed but not really there
 
@@ -90,6 +99,7 @@ From the landing page, metadata and system prompt:
 | Checks | `FREE_REVIEW_LIMIT` per person, lifetime (default **1**). Also max `FREE_REVIEWS_PER_IP_PER_DAY` (default 3) and service-wide `FREE_REVIEWS_GLOBAL_PER_DAY` (default 200) | Unlimited, fair use (`REVIEWS_PER_USER_PER_HOUR`, default 20) |
 | Upload/OCR | Requires login; 30 files/user/hour; not counted against the free allowance | Same |
 | History | Account, any device | Same |
+| Deadline reminders | Upsell panel only (`REMINDERS_PRO_ONLY=true`, default) | Yes |
 | Billing mgmt | n/a | Stripe portal (workspace owner) |
 
 The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe webhook, or `workspaces.comp_pro`), for the signed-in user's workspace. Nothing the browser sends can make someone Pro.
@@ -98,8 +108,8 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 
 - **Platform**: Next.js 14 on Vercel, **Node 22** (Node 20 is end-of-life and current Supabase/vitest need 22). Routes: `/`, `/privacy`, `/terms`, `/auth/callback`.
 - **Data storage**: Supabase Postgres (accounts, workspaces, subscriptions, review results, free-tier ledger). Uploaded files and full contract text are processed in memory and not stored. Contract text is sent to Anthropic.
-- **Third parties**: Anthropic (AI), Stripe (billing), Supabase (auth + database), Vercel (hosting).
-- **Cost controls**: free checks capped per person, per IP and globally per day. At the README's 5p to 20p per review, the default global cap bounds free spend at roughly £10 to £40/day (not re-measured).
+- **Third parties**: Anthropic (AI), Stripe (billing), Supabase (auth + database), Resend (reminder email), Vercel (hosting + cron), gov.uk bank holidays feed.
+- **Cost controls**: free checks capped per person, per IP and globally per day. At the README's 5p to 20p per review, the default global cap bounds free spend at roughly £10 to £40/day (not re-measured). **Pro reviews now make two Claude calls** (review + deadline extraction), each sending the full contract, so Pro input cost per check roughly doubles. `ANTHROPIC_EXTRACTION_MODEL` can point extraction at a cheaper model if quality holds.
 - **Latency**: non-streaming, up to 8k output tokens, 60s function limit; SDK timeout 55s with one retry.
 - **Tests**: unit tests (vitest), SQL/RLS tests against a local Postgres (`npm run test:db`), typecheck, build.
 - **Accessibility / i18n**: `en-GB`, British English throughout. No specific a11y work beyond semantic buttons.
@@ -115,6 +125,9 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 - Scanned PDFs are rejected instead of OCR'd.
 - Refresh/back mid-flow loses the check in progress (saved reviews are safe).
 - Email confirmation is now required before the first free check: more friction between landing and first value.
+- **Deadline extraction has not been measured against real contracts.** It's tested for shape and safety (bad output is dropped, not guessed), not for how often it finds the right deadlines. Needs an eval on a set of real JCT/NEC/bespoke subcontracts before it's marketed hard.
+- Reminders run once a day (06:00 UTC); a deadline confirmed after that run gets its first email the next morning.
+- Deadlines that run from an event (instruction, completion) have no date, and so no reminder, until the user enters the event date.
 
 ## 8. Open questions
 
@@ -141,7 +154,9 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 **Roadmap definitions**
 15. Cloud history retention. **Default shipped:** kept until the user deletes it or asks for account deletion; full contract text never stored. Is a fixed retention period (e.g. 24 months inactive) wanted?
 16. Team seats: per-seat pricing or a flat team plan? Is there a seat cap given the <25 staff target?
-17. Notice reminders: which notices, which channels, and is it Pro-only?
+17. Notice reminders. **Default shipped:** Pro-only (`REMINDERS_PRO_ONLY`), email only, notices = payment applications, payment/pay less notices, variation, EOT/delay/early warning/claim notices, retention release, final account, other time-limited notices. SMS or calendar export not built.
+18. Reminder timing. **Default shipped:** 2 working days before + on the day. Is that the right lead time for a site team?
+19. When the contract doesn't say calendar or working days. **Default shipped:** use whichever date is earlier, and say so in the UI and email. Alternative would be to follow the Construction Act's counting rules, which is closer to a legal interpretation.
 
 **Brand, domain and claims**
 18. Canonical domain: `guardconstruct.com` (code fallback, Stripe redirects) or `cashflowguard-mvp.vercel.app`? Needed for auth and reminder email sending (DNS).
@@ -160,3 +175,4 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 |---|---|
 | 0 | Removed unauthenticated `/api/portal` and the founder any-password login |
 | 1 | Supabase accounts + email confirmation; Terms acceptance gate; workspace/subscription/review schema with RLS; Stripe webhook sync; authenticated checkout/portal; cloud history + device import; durable free-tier ledger with alias and IP protection; login required for uploads; legal pages updated; Node 22; tests |
+| 2 | Deadline extraction (structured output), jobs, confirm/dismiss/date flow, UK bank-holiday-aware date maths, daily reminder digest via Resend + Vercel Cron, deadlines view, opt-out; Terms (new §5B, re-acceptance required) and Privacy updated |

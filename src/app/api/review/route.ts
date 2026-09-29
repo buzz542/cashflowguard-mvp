@@ -4,7 +4,10 @@ import { requireUser, loadWorkspaceContext, jsonError, ACTIVE_WORKSPACE_COOKIE }
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getAnthropic, textFrom } from "@/lib/anthropic";
 import { REVIEW_SYSTEM_PROMPT } from "@/lib/reviewPrompt";
-import { config, PROMPT_VERSION } from "@/lib/config";
+import { config, PROMPT_VERSION, EXTRACTION_VERSION } from "@/lib/config";
+import { extractObligations } from "@/lib/extractObligations";
+import { remindersAllowed, OBLIGATION_COLUMNS } from "@/lib/reminderScheduler";
+import type { Obligation } from "@/lib/obligations";
 import { canonicalEmail } from "@/lib/canonicalEmail";
 import { hashIp } from "@/lib/ipHash";
 
@@ -94,6 +97,18 @@ export async function POST(req: NextRequest) {
 DOCUMENT TO REVIEW:
 ${contractText}`;
 
+    // Deadline extraction runs alongside the review: the contract text is only in memory now.
+    const canTrack = remindersAllowed(ctx.isPro);
+    const extraction: Promise<{ ok: true; list: Obligation[] } | { ok: false }> | null = canTrack
+      ? extractObligations(anthropic, contractText, role).then(
+          (list) => ({ ok: true as const, list }),
+          (e) => {
+            console.error("Obligation extraction failed:", e instanceof Error ? e.message : e);
+            return { ok: false as const };
+          }
+        )
+      : null;
+
     let result = "";
     try {
       const message = await anthropic.messages.create({
@@ -129,18 +144,50 @@ ${contractText}`;
         contract_preview: contractText.slice(0, 120),
         result_md: result,
         model: config.anthropicModel,
-        prompt_version: PROMPT_VERSION
+        prompt_version: PROMPT_VERSION,
+        extraction_status: canTrack ? null : "not_run"
       })
       .select("id, created_at")
       .single();
     // The user has paid for this result (in money or their free check): return it even if saving failed.
     if (saveErr) console.error("Review save failed:", saveErr.message);
 
+    let obligations: unknown[] = [];
+    let extractionStatus: "ok" | "failed" | "not_run" = "not_run";
+    if (extraction) {
+      const ex = await extraction;
+      extractionStatus = ex.ok ? "ok" : "failed";
+      if (ex.ok && ex.list.length && saved?.id) {
+        const { data: rows, error: obErr } = await admin
+          .from("obligations")
+          .insert(
+            ex.list.map((o) => ({
+              ...o,
+              workspace_id: ctx.workspace.id,
+              review_id: saved.id,
+              status: "suggested",
+              extraction_version: EXTRACTION_VERSION
+            }))
+          )
+          .select(OBLIGATION_COLUMNS);
+        if (obErr) {
+          console.error("Obligation save failed:", obErr.message);
+          extractionStatus = "failed";
+        } else {
+          obligations = rows ?? [];
+        }
+      }
+      if (saved?.id) await admin.from("reviews").update({ extraction_status: extractionStatus }).eq("id", saved.id);
+    }
+
     return NextResponse.json({
       result,
       isPro: ctx.isPro,
       reviewId: saved?.id ?? null,
-      saved: !saveErr
+      saved: !saveErr,
+      canTrackDeadlines: canTrack,
+      extraction: extractionStatus,
+      obligations
     });
   } catch (error: unknown) {
     console.error("Review error:", error instanceof Error ? error.message : error);

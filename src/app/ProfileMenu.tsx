@@ -9,7 +9,9 @@ export function ProfileMenu({
   onManageBilling,
   reviews = [],
   onOpenReview,
-  onViewAllReviews
+  onViewAllReviews,
+  onViewDeadlines,
+  onToggleReminders
 }: {
   me: Me;
   onLogout: () => void;
@@ -17,6 +19,8 @@ export function ProfileMenu({
   reviews?: ReviewSummary[];
   onOpenReview?: (id: string) => void;
   onViewAllReviews?: () => void;
+  onViewDeadlines?: () => void;
+  onToggleReminders?: (on: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -109,6 +113,22 @@ export function ProfileMenu({
               </ul>
             )}
           </div>
+
+          {(onViewDeadlines || onToggleReminders) && (
+            <div className="py-3 border-b space-y-2">
+              {onViewDeadlines && (
+                <button type="button" className="text-sm text-blue-600 font-medium" onClick={() => { setOpen(false); onViewDeadlines(); }}>
+                  Deadlines I&apos;m tracking
+                </button>
+              )}
+              {onToggleReminders && (
+                <label className="flex items-center justify-between text-sm text-gray-700">
+                  <span>Email reminders</span>
+                  <input type="checkbox" checked={me.reminderEmails ?? true} onChange={(e) => onToggleReminders(e.target.checked)} />
+                </label>
+              )}
+            </div>
+          )}
 
           {onManageBilling && (
             <button

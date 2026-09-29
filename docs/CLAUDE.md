@@ -45,6 +45,9 @@ See `.env.example` for the full list with comments. Key ones:
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Review + photo OCR |
 | `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET` | Billing |
 | `IP_HASH_SALT` | Hashing IPs for the free-tier ledger |
+| `RESEND_API_KEY`, `EMAIL_FROM` | Reminder emails (`lib/email.ts`) |
+| `CRON_SECRET` | Bearer token Vercel Cron sends to `/api/cron/reminders` |
+| `REMINDERS_PRO_ONLY`, `ANTHROPIC_EXTRACTION_MODEL` | Deadline extraction + reminders |
 | `FREE_REVIEW_LIMIT`, `FREE_REVIEWS_PER_IP_PER_DAY`, `FREE_REVIEWS_GLOBAL_PER_DAY`, `REVIEWS_PER_USER_PER_HOUR` | `src/lib/config.ts` |
 | `NEXT_PUBLIC_APP_URL` | Redirect URLs (preferred over the request `Origin`) |
 
@@ -57,7 +60,8 @@ src/
     page.tsx                  Server wrapper: passes config (free limit) into HomeClient
     HomeClient.tsx            The app: marketing, flows, history, banners
     AuthModal.tsx             Signup/login (password or magic link) + TermsGate
-    ProfileMenu.tsx           Avatar dropdown
+    DeadlinesPanel.tsx        Extracted deadlines under a review + the all-deadlines view
+    ProfileMenu.tsx           Avatar dropdown (+ reminder email toggle)
     ReviewResults.tsx         Markdown renderer + copy buttons on suggested wording
     auth/callback/route.ts    Magic link / email confirmation landing (PKCE code or token_hash)
     privacy/, terms/          Legal pages
@@ -73,6 +77,11 @@ src/
       checkout/verify/route.ts GET sync subscription on return from Checkout
       portal/route.ts         POST Stripe Customer Portal (owner only)
       stripe/webhook/route.ts POST Stripe → Postgres subscription sync
+      jobs/route.ts           POST start tracking a reviewed contract as a job
+      obligations/[id]/route.ts PATCH confirm/dismiss, event date, manual date → reschedule
+      deadlines/route.ts      GET confirmed deadlines + jobs for the workspace
+      me/preferences/route.ts PATCH reminder email opt-out
+      cron/reminders/route.ts GET daily sender (CRON_SECRET)
   lib/
     config.ts                 Env-driven settings, TERMS_VERSION, PROMPT_VERSION, appOrigin()
     session.ts                requireUser(), loadWorkspaceContext(), jsonError()
@@ -87,10 +96,22 @@ src/
     reviewImport.ts           Validation for device-history import
     rateLimit.ts              In-memory per-instance limiter (speed bumps only)
     clientTypes.ts            Shapes returned to the browser
+    obligations.ts            Extraction prompt, wire schema, sanitizeObligations() (server)
+    obligationKinds.ts        Kind labels (client-safe, no zod)
+    extractObligations.ts     The structured-output Claude call
+    deadlines.ts              Date maths: working days, event offsets, monthly, reminder slots, ukToday
+    bankHolidays.ts           gov.uk feed + rule-based UK bank holidays per nation
+    obligationDue.ts          computeDue(), describeTiming()
+    reminderScheduler.ts      rescheduleObligation(), remindersAllowed()
+    reminderEmail.ts          Digest email (HTML-escaped)
+    email.ts                  Resend HTTP call
+    membership.ts             roleIn(), UUID_RE
 supabase/
   migrations/0001_accounts_history.sql
+  migrations/0002_deadline_reminders.sql
   tests/auth_shim.sql         Fake auth schema + roles for local Postgres
-  tests/0001_rls_test.sql
+  tests/0001_rls_test.sql, tests/0002_reminders_test.sql
+vercel.json                   Daily cron for /api/cron/reminders
 scripts/test-db.sh
 tests/*.test.ts
 ```
@@ -104,7 +125,11 @@ Tables (`supabase/migrations/0001_accounts_history.sql`):
 - `subscriptions`: one row per workspace, mirrored from Stripe
 - `reviews`: per workspace; result markdown + context + 120-char preview. **Never the full contract text**
 - `free_allowance` (canonical email → used), `free_review_events` (hashed IP log, purged after 2 days)
-- Functions: `is_workspace_member(ws)` (for RLS), `claim_free_review(...)`, `refund_free_review(event)`
+- `jobs` (workspace, name, jurisdiction), `reviews.job_id`, `reviews.extraction_status`
+- `obligations` (per review; trigger shape enforced by a CHECK; `status` suggested/confirmed/dismissed; `due_date` + `due_basis`)
+- `reminders` (obligation × user × send date × lead/due; status pending/sending/sent/skipped/failed)
+- `profiles.reminder_emails` (opt-out)
+- Functions: `is_workspace_member(ws)` (for RLS), `claim_free_review(...)`, `refund_free_review(event)`, `claim_due_reminders(today, limit)`
 
 **The rule:** the browser/user JWT can only `SELECT`, and only rows RLS allows (own profile, workspaces you belong to and their members, subscriptions and reviews). Every write goes through an API route with the service-role client *after* that route has checked the session and membership. Don't add user-facing write grants or policies; add an API route.
 
@@ -129,6 +154,18 @@ Reads that the user is entitled to go through `createSupabaseServerClient()` (RL
 ## Free tier
 
 `/api/review` calls `claim_free_review(canonical_email, ip_hash, limits…)` **before** calling Claude. It serialises on an advisory lock and checks, in order: per-person lifetime limit, per-IP 24h limit, service-wide daily cap. Returns `ok | user_limit | ip_limit | global_limit`. On AI failure or empty output the route calls `refund_free_review`. `canonicalEmail()` lowercases, strips `+tags`, and for Gmail drops dots.
+
+## Deadline reminders
+
+Flow: `/api/review` runs `extractObligations()` **in parallel** with the review (only for users allowed reminders), because the full contract text only exists in memory for that request. Results are saved as `obligations` with `status = 'suggested'` and `reviews.extraction_status` records ok/failed/not_run. Extraction failing never fails the review.
+
+- **Extraction is untrusted.** The SDK's `messages.parse()` throws on any schema mismatch, so the output format is a permissive wire schema (strings, not enums) and `sanitizeObligations()` validates each item on its own, dropping bad ones. Never "repair" a missing period or date.
+- **Nothing is scheduled until the user confirms.** Confirming requires a job (`POST /api/jobs` links the review and its obligations). Event-triggered deadlines have no due date until the user enters the event date.
+- **Date rules** (`deadlines.ts`): `calendar`/`working` as the contract says; `unspecified` → the earlier of the two. Working days skip weekends + the job's nation's bank holidays (`bankHolidays.ts`: gov.uk feed cached a day, rule-based fallback and future years). `manual` dates always win.
+- **Reminders**: `rescheduleObligation()` recomputes the due date and replaces pending `reminders` rows (lead = 2 working days before, and on the day; a lead date already past becomes today). Call it after *any* change to an obligation.
+- **Sender**: `/api/cron/reminders` (Vercel Cron, daily 06:00 UTC, `CRON_SECRET`). Rolls monthly deadlines forward, then `claim_due_reminders()` atomically skips invalid rows (unconfirmed, past, opted out) and claims due ones (`FOR UPDATE SKIP LOCKED`; stale `sending` retried after 30 min, max 3, never after the due date). Re-checks Pro, sends one digest per user, marks sent.
+- Emails escape all contract-derived text (`reminderEmail.ts`). Keep it that way.
+- Bump `EXTRACTION_VERSION` when the extraction prompt/schema changes (stored per obligation).
 
 ## Uploads
 
@@ -169,6 +206,9 @@ Files are processed in memory and never persisted. The client continues past a f
 7. **Account deletion** is by email request (privacy policy). No self-service button.
 8. **Supabase auth emails** need custom SMTP in production; the default sender is heavily rate-limited.
 9. Git history shows many wholesale "Restore page" overwrites of the old `page.tsx`. Keep edits to `HomeClient.tsx` surgical.
+10. **Extraction quality is unmeasured.** Tests cover shape and safety, not recall/precision on real contracts. Build an eval before relying on it in marketing.
+11. **Pro reviews cost roughly twice as much in input tokens** (review + extraction both send the full contract).
+12. **One cron run a day.** A deadline confirmed after 06:00 UTC gets its first email the next day. The in-app list is always current.
 
 ## Note on this file's location
 
