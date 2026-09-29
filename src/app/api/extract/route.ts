@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import mammoth from "mammoth";
 import Anthropic from "@anthropic-ai/sdk";
+import { rateLimit, clientIp } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,7 +18,7 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
 async function extractImageText(buffer: Buffer, mimeType: string): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY is not set — required to read photos of documents.");
+    throw new Error("OCR_UNAVAILABLE");
   }
 
   const anthropic = new Anthropic({ apiKey });
@@ -67,6 +68,15 @@ async function extractImageText(buffer: Buffer, mimeType: string): Promise<strin
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = clientIp(req);
+    const rl = rateLimit(`extract:${ip}`, 20, 60 * 60 * 1000);
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "Rate limit reached. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } }
+      );
+    }
+
     const form = await req.formData();
     const file = form.get("file");
 
@@ -124,12 +134,11 @@ export async function POST(req: NextRequest) {
           );
         }
         return NextResponse.json({ text, fileName: file.name });
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error("PDF extract error:", e);
         return NextResponse.json(
           {
-            error:
-              "Could not read this PDF. Photograph the pages or paste the text."
+            error: "Could not read this PDF. Photograph the pages or paste the text."
           },
           { status: 400 }
         );
@@ -141,12 +150,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "HEIC photos are not supported. On iPad, use JPEG / Most Compatible, or take the photo again."
+              "HEIC photos are not supported. Switch iPhone camera to Most Compatible (JPEG) or take a screenshot."
           },
           { status: 400 }
         );
       }
-
       try {
         const text = await extractImageText(buffer, type || "image/jpeg");
         if (!text || text.length < 20) {
@@ -159,10 +167,10 @@ export async function POST(req: NextRequest) {
           );
         }
         return NextResponse.json({ text, fileName: file.name });
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error("Image extract error:", e);
         return NextResponse.json(
-          { error: e.message || "Could not read this photo." },
+          { error: "Could not read this photo. Try better light or paste the text." },
           { status: 500 }
         );
       }
@@ -172,10 +180,10 @@ export async function POST(req: NextRequest) {
       { error: "Unsupported file. Use a photo, PDF, Word (.docx), or paste text." },
       { status: 400 }
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Extract error:", error);
     return NextResponse.json(
-      { error: error.message || "Failed to read file" },
+      { error: "Failed to read file. Try another format or paste the text." },
       { status: 500 }
     );
   }
