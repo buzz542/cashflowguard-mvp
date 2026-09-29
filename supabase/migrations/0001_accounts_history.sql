@@ -56,7 +56,7 @@ create table public.subscriptions (
 );
 
 -- Review history. Deliberately does NOT store the full contract text: only the
--- AI result and a short preview. See privacy policy.
+-- AI result and a short preview (preview column dropped in 0004). See privacy policy.
 create table public.reviews (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces (id) on delete cascade,

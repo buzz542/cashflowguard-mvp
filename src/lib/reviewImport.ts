@@ -7,7 +7,6 @@ export type ImportedReview = {
   createdAt: string;
   trade: string | null;
   role: string | null;
-  preview: string | null;
   result: string;
 };
 
@@ -37,7 +36,6 @@ export function sanitizeImport(payload: unknown, now = Date.now()): ImportedRevi
       createdAt,
       trade: str(r.trade, 120),
       role: str(r.role, 80),
-      preview: str(r.preview, 200),
       result
     });
   }

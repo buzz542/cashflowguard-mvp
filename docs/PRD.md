@@ -45,17 +45,17 @@ From the landing page, metadata and system prompt:
 | Accounts | Supabase Auth: email + password or magic link, email confirmation required, session cookies | `AuthModal.tsx`, `auth/callback`, `middleware.ts` |
 | Terms acceptance | Checkbox at signup + Terms gate before first check; stored per user with version; server refuses checks without it | `AuthModal.tsx`, `api/me/terms`, `api/review` |
 | Job context capture | 4 fields; used to weight severity and estimate exposure, never echoed back | `HomeClient.tsx`, `api/review` |
-| Photo upload + OCR | Camera capture on mobile, Claude vision transcription. JPEG/PNG/GIF/WebP. HEIC rejected. Requires login | `api/extract` |
+| Photo upload + OCR | Camera capture on mobile, Claude vision transcription. JPEG/PNG/GIF/WebP. HEIC rejected. Requires login; capped per day for non-Pro users | `api/extract`, `lib/ocrAllowance.ts` |
 | PDF upload | Text-layer PDFs only. Scanned PDFs rejected with "photograph each page" | `api/extract` |
 | Word upload | `.docx` only; `.doc` rejected | `api/extract` |
 | Paste / text upload | `.txt`, `.md`, `.csv` or paste into textarea | `HomeClient.tsx`, `api/extract` |
 | Multi-page | Up to 12 files per selection, more batches allowed; text concatenated. Max 120k chars total | `HomeClient.tsx`, `api/review` |
 | AI contract review | Claude, fixed system prompt (Construction Act 1996, JCT, NEC3/4, FIDIC, bespoke). Model from `ANTHROPIC_MODEL`, default `claude-sonnet-4-5` | `api/review`, `lib/reviewPrompt.ts` |
 | Risk watchlist | Pay-when-paid/pay-if-paid; payment cycles; retention; payment/pay-less notice traps; set-off; flow-down; LADs; variation/EOT notice conditions precedent; suspension rights; indemnity/insurance; "final and conclusive"; other conditions precedent | `lib/reviewPrompt.ts` |
-| Action plan output | 🚨 / 👀 / ✅ → 🔴 RED and 🟠 AMBER detailed risks → Your key actions → Overall call: SIGN / ASK FIRST / DON'T SIGN YET | `lib/reviewPrompt.ts`, `ReviewResults.tsx` |
+| Action plan output | 🚨 / 👀 / ✅ → 🔴 RED and 🟠 AMBER detailed risks → Your key actions → Suggested next step: Nothing major stood out / Raise these points before signing / Get professional advice before signing (never "sign" or "don't sign") | `lib/reviewPrompt.ts`, `ReviewResults.tsx` |
 | Copy suggested wording | One-click copy per suggested-wording block | `ReviewResults.tsx` |
 | AI / legal disclaimers | Red "Not legal advice" + amber "Automated AI summary" on every result, including history | `HomeClient.tsx`, `ReviewResults.tsx` |
-| **Cloud review history** | Stored in Postgres per workspace. List (100 newest), open, delete. Stores result + job context + first 120 chars of contract; **not** the full contract | `api/reviews*`, `supabase/migrations/0001` |
+| **Cloud review history** | Stored in Postgres per workspace. List (100 newest), open, delete. Stores result + job context only; **not** the contract (the 120-char preview was dropped in Phase 4) | `api/reviews*`, `supabase/migrations/0001` |
 | Import device history | One-time import of reviews saved in the browser by the pre-accounts version (same email only), then removed from the device. Old password hashes are wiped from localStorage on load | `api/reviews/import`, `HomeClient.tsx` |
 | Profile menu | Name, email, Free/Pro badge, free checks left, last 5 reviews, Manage billing (workspace owner with a Stripe customer), Log out | `ProfileMenu.tsx` |
 | Free tier | Per person (canonical email: aliases share one), plus per-IP daily cap and a service-wide daily cap. Atomic in Postgres. Refunded if the AI call fails | `api/review`, `claim_free_review()` |
@@ -102,7 +102,7 @@ From the landing page, metadata and system prompt:
 |---|---|---|
 | Price | £0 | £19/month (hardcoded in UI; actual charge is whatever `STRIPE_PRICE_ID` is) |
 | Checks | `FREE_REVIEW_LIMIT` per person, lifetime (default **1**). Also max `FREE_REVIEWS_PER_IP_PER_DAY` (default 3) and service-wide `FREE_REVIEWS_GLOBAL_PER_DAY` (default 200) | Unlimited, fair use (`REVIEWS_PER_USER_PER_HOUR`, default 20) |
-| Upload/OCR | Requires login; 30 files/user/hour; not counted against the free allowance | Same |
+| Upload/OCR | Requires login. Photo pages (AI calls) only while a free check remains, max `FREE_OCR_PAGES_PER_DAY` (default 12) per day, service-wide `FREE_OCR_PAGES_GLOBAL_PER_DAY` (2000); PDF/Word/text unlimited | 30 files/user/hour |
 | History | Account, any device | Same |
 | Deadline reminders | Upsell panel only (`REMINDERS_PRO_ONLY=true`, default) | Yes |
 | Teams | Can create and join teams; no Pro seat until the owner buys seats | Per seat: `STRIPE_TEAM_PRICE_ID` if set, else the Pro price × seats (i.e. £19/seat by default) |
@@ -141,7 +141,7 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 
 **Free tier and pricing**
 1. What is the intended free allowance? **Default shipped:** 1 per person (canonical email), lifetime, plus 3/IP/day and 200/day service-wide. All env-configurable.
-2. Should document extraction (photo OCR) count against the free allowance? **Default shipped:** requires login, rate-limited, not counted.
+2. Should photo reading (an AI call per page) count against the free allowance? **Default shipped (Phase 4):** only while a free check remains, 12 pages/day per person, 2000/day service-wide. PDF/Word/text uncapped.
 3. Is "Unlimited" for Pro meant literally? **Default shipped:** unlimited with a fair-use cap of 20/hour, disclosed in the Terms.
 4. Is £19/month inclusive of VAT? Is there an annual plan or a trial? (Server accepts `trialing`; checkout doesn't configure a trial.)
 5. Are promo codes intentionally enabled at checkout (`allow_promotion_codes: true`)? Left on.
@@ -185,3 +185,4 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 | 1 | Supabase accounts + email confirmation; Terms acceptance gate; workspace/subscription/review schema with RLS; Stripe webhook sync; authenticated checkout/portal; cloud history + device import; durable free-tier ledger with alias and IP protection; login required for uploads; legal pages updated; Node 22; tests |
 | 2 | Deadline extraction (structured output), jobs, confirm/dismiss/date flow, UK bank-holiday-aware date maths, daily reminder digest via Resend + Vercel Cron, deadlines view, opt-out; Terms (new §5B, re-acceptance required) and Privacy updated |
 | 3 | Team workspaces, email invites (hashed single-use tokens), per-seat Stripe checkout with adjustable quantity, seat allocation by join order, member removal with reminder re-routing, deadline assignees, workspace switcher; Terms §4A, Privacy updated; mobile account-menu overflow fixed |
+| 4 | Photo-OCR cap for non-Pro users (durable, per person + service-wide, refunds on failure); stopped storing the contract preview (column dropped); review ends with a "Suggested next step" instead of a sign/don't-sign verdict |

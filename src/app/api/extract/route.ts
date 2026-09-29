@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import mammoth from "mammoth";
 import { rateLimit } from "@/lib/rateLimit";
-import { requireUser } from "@/lib/session";
+import { requireUser, ACTIVE_WORKSPACE_COOKIE } from "@/lib/session";
+import { claimPhotoPage } from "@/lib/ocrAllowance";
 import { getAnthropic, textFrom } from "@/lib/anthropic";
 import { config } from "@/lib/config";
 
@@ -151,6 +152,8 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
+      const page = await claimPhotoPage(auth.user, auth.email, req.cookies.get(ACTIVE_WORKSPACE_COOKIE)?.value);
+      if (!page.ok) return page.response;
       try {
         const text = await extractImageText(buffer, type || "image/jpeg");
         if (!text || text.length < 20) {
@@ -164,6 +167,8 @@ export async function POST(req: NextRequest) {
         }
         return NextResponse.json({ text, fileName: file.name });
       } catch (e: unknown) {
+        // The AI call failed: don't charge the page against the daily cap.
+        await page.refund().catch(() => undefined);
         console.error("Image extract error:", e);
         return NextResponse.json(
           { error: "Could not read this photo. Try better light or paste the text." },

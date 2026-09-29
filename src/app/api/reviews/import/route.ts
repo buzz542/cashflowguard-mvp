@@ -36,7 +36,6 @@ export async function POST(req: NextRequest) {
           author_id: auth.user.id,
           trade: r.trade,
           role: r.role,
-          contract_preview: r.preview,
           result_md: r.result,
           model: "unknown",
           prompt_version: "imported-from-device",

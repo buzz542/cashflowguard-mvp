@@ -141,7 +141,6 @@ ${contractText}`;
         role: role || null,
         project_size: projectSize || null,
         duration: duration || null,
-        contract_preview: contractText.slice(0, 120),
         result_md: result,
         model: config.anthropicModel,
         prompt_version: PROMPT_VERSION,

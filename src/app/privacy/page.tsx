@@ -38,11 +38,12 @@ export default function PrivacyPage() {
           <li>Job context you enter (trade, package size band, duration, role).</li>
           <li>Contract documents, photos or text you upload for review.</li>
           <li>
-            Your review history: the AI result for each check, the job context, and the first 120 characters of the
-            contract text. Results can quote contract wording, which may include names and addresses of the parties.
+            Your review history: the AI result for each check and the job context. We don&apos;t keep the contract
+            itself. Results can quote contract wording, which may include names and addresses of the parties.
           </li>
           <li>
-            For free-tier limits: a normalised form of your email address and a one-way hash of your IP address.
+            For free-tier limits: a normalised form of your email address, a one-way hash of your IP address, and a
+            daily count of photo pages read (deleted after 7 days).
           </li>
           <li>
             If you use a team workspace: your membership, and the email addresses of people invited (kept until the

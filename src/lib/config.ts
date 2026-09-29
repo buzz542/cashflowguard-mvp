@@ -41,7 +41,11 @@ export function loadConfig(env: Env = process.env) {
     maxTeamSeats: readInt(env, "MAX_TEAM_SEATS", 25, 2, 500),
     /** Team workspaces one person can own. */
     maxOwnedTeams: readInt(env, "MAX_OWNED_TEAMS", 3, 1, 50),
-    inviteTtlDays: readInt(env, "INVITE_TTL_DAYS", 7, 1, 90)
+    inviteTtlDays: readInt(env, "INVITE_TTL_DAYS", 7, 1, 90),
+    /** Photo pages a non-Pro user can have read per UK day (each is an AI call). */
+    freeOcrPagesPerDay: readInt(env, "FREE_OCR_PAGES_PER_DAY", 12, 0, 500),
+    /** Service-wide daily cap on photo pages for non-Pro users. */
+    freeOcrPagesGlobalPerDay: readInt(env, "FREE_OCR_PAGES_GLOBAL_PER_DAY", 2000, 0, 1000000)
   };
 }
 
@@ -51,7 +55,7 @@ export const config = loadConfig();
 export const TERMS_VERSION = "2026-09-29.3";
 
 /** Bump when the review system prompt changes, so stored reviews record which one produced them. */
-export const PROMPT_VERSION = "2026-09-29.1";
+export const PROMPT_VERSION = "2026-09-30.1";
 
 /** Bump when the deadline-extraction prompt or schema changes. */
 export const EXTRACTION_VERSION = "2026-09-29.1";

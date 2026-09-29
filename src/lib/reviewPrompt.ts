@@ -86,9 +86,10 @@ Example style:
 
 ---
 
-## Overall call
-One line only:
-**SIGN** / **ASK FIRST** / **DON'T SIGN YET** — plus one short reason in plain English.
+## Suggested next step
+One line only, using whichever fits best:
+**Nothing major stood out** / **Raise these points before signing** / **Get professional advice before signing** — plus one short reason in plain English.
+Never tell the user to sign or not to sign: the decision is theirs.
 
 End. No extra sections. No restating of user context. No long disclaimer (the product UI already shows one).
 `;

@@ -118,8 +118,9 @@ supabase/
   migrations/0001_accounts_history.sql
   migrations/0002_deadline_reminders.sql
   migrations/0003_team_seats.sql
+  migrations/0004_ocr_cap_and_minimisation.sql
   tests/auth_shim.sql         Fake auth schema + roles for local Postgres
-  tests/0001_rls_test.sql, tests/0002_reminders_test.sql, tests/0003_teams_test.sql
+  tests/0001_rls_test.sql, tests/0002_reminders_test.sql, tests/0003_teams_test.sql, tests/0004_ocr_test.sql
 vercel.json                   Daily cron for /api/cron/reminders
 scripts/test-db.sh
 tests/*.test.ts
@@ -132,7 +133,7 @@ Tables (`supabase/migrations/0001_accounts_history.sql`):
 - `workspaces`: every user gets a **personal** workspace on signup (trigger `handle_new_user`). `comp_pro` = complimentary Pro
 - `workspace_members`: `(workspace_id, user_id, role owner|member)`
 - `subscriptions`: one row per workspace, mirrored from Stripe
-- `reviews`: per workspace; result markdown + context + 120-char preview. **Never the full contract text**
+- `reviews`: per workspace; result markdown + context. **Never the contract text** (the preview column was dropped in 0004)
 - `free_allowance` (canonical email → used), `free_review_events` (hashed IP log, purged after 2 days)
 - `jobs` (workspace, name, jurisdiction), `reviews.job_id`, `reviews.extraction_status`
 - `obligations` (per review; trigger shape enforced by a CHECK; `status` suggested/confirmed/dismissed; `due_date` + `due_basis`)
@@ -163,6 +164,9 @@ Reads that the user is entitled to go through `createSupabaseServerClient()` (RL
 - Price text (£19) is hardcoded in the UI; the charge is whatever `STRIPE_PRICE_ID` is.
 
 ## Free tier
+
+Photo uploads: `claimPhotoPage()` (`lib/ocrAllowance.ts`) lets non-Pro users have photos read only while a free check remains, capped per UK day per person and service-wide via `claim_ocr_page()`; refunded if the AI call fails. PDF/Word/text parsing costs nothing and isn't capped.
+
 
 `/api/review` calls `claim_free_review(canonical_email, ip_hash, limits…)` **before** calling Claude. It serialises on an advisory lock and checks, in order: per-person lifetime limit, per-IP 24h limit, service-wide daily cap. Returns `ok | user_limit | ip_limit | global_limit`. On AI failure or empty output the route calls `refund_free_review`. `canonicalEmail()` lowercases, strips `+tags`, and for Gmail drops dots.
 
