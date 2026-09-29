@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { isUserProInWorkspace } from "@/lib/session";
-import { config } from "@/lib/config";
+import { config, appOrigin } from "@/lib/config";
 import { ukToday } from "@/lib/deadlines";
 import { rescheduleObligation } from "@/lib/reminderScheduler";
 import { renderDigest, type DigestItem } from "@/lib/reminderEmail";
@@ -109,7 +109,7 @@ export async function GET(req: NextRequest) {
   const byUser = new Map<string, Claimed[]>();
   for (const c of keep) byUser.set(c.user_id, [...(byUser.get(c.user_id) ?? []), c]);
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim() || new URL(req.url).origin;
+  const appUrl = appOrigin(req);
   for (const rows of Array.from(byUser.values())) {
     const perObligation = new Map<string, DigestItem>();
     for (const r of rows) {

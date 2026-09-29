@@ -19,3 +19,19 @@ describe("config", () => {
     expect(readBool({ B: "maybe" }, "B", true)).toBe(true);
   });
 });
+
+import { resolveAppOrigin } from "@/lib/config";
+
+describe("resolveAppOrigin", () => {
+  const url = "https://cashflowguard-abc123-buzz542s-projects.vercel.app/api/checkout";
+  it("explicit setting wins", () => {
+    expect(resolveAppOrigin({ NEXT_PUBLIC_APP_URL: "https://guardconstruct.com/" }, "https://x.vercel.app", url)).toBe("https://guardconstruct.com");
+  });
+  it("production never returns a per-deployment URL", () => {
+    expect(resolveAppOrigin({ VERCEL_ENV: "production", VERCEL_PROJECT_PRODUCTION_URL: "guardconstruct.com" }, "https://cashflowguard-abc123-buzz542s-projects.vercel.app", url)).toBe("https://guardconstruct.com");
+  });
+  it("previews and local dev use the request origin", () => {
+    expect(resolveAppOrigin({ VERCEL_ENV: "preview", VERCEL_PROJECT_PRODUCTION_URL: "guardconstruct.com" }, "https://preview.vercel.app", url)).toBe("https://preview.vercel.app");
+    expect(resolveAppOrigin({}, null, "http://localhost:3000/api/x")).toBe("http://localhost:3000");
+  });
+});

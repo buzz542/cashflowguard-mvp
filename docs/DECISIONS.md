@@ -37,3 +37,14 @@ Product and technical choices made without asking, per the instruction to pick t
 | Team transfer / deletion | Owner can hand the team to an existing member, or delete it (typing the team name). Both refused while the team plan is active | The card on file is the old owner's; cancel-then-rebuy is the simplest correct billing handover |
 | Social-proof strip | "Trusted by early UK contractors" → "Built for UK trades" | No evidence of customers behind the claim; ASA/CAP treat implied endorsements strictly |
 | Extraction eval | 5 hand-written UK-subcontract-style fixtures incl. a vague clause that must be dropped and an other-party obligation that must be ignored; greedy one-to-one matching on kind + trigger + period; bar 80% recall / 70% precision; skipped without an API key | Smallest useful harness; real contracts should replace the fixtures |
+| Production return URLs | `NEXT_PUBLIC_APP_URL`, else in production `https://$VERCEL_PROJECT_PRODUCTION_URL` (= guardconstruct.com), else the request origin | Live checkouts were returning customers to per-deployment URLs behind Vercel's login wall |
+| VAT | No change: £19 flat, no automatic tax at checkout | Changing tax handling needs your VAT status; if registered, turn on Stripe Tax and add `automatic_tax: { enabled: true }` to checkout |
+| FIDIC | Kept in the prompt, not marketed | Unchanged behaviour |
+| Jurisdiction | Reviews framed on English law; reminders support E&W, Scotland, NI bank holidays | Unchanged review behaviour; reminders already built per nation |
+| "Under 25 staff" | Positioning only; teams capped at 25 people | Matches existing cap |
+| Main contractors / clients | Not a target; role list unchanged | Unchanged behaviour |
+| Review timeouts | Keep `maxDuration` 60s, non-streaming | Raising it depends on the Vercel plan/fluid compute setting; revisit if logs show timeouts |
+| In-memory rate limits | Kept as speed bumps; every path that costs money (free checks, free photo pages) is capped in Postgres | Durable limits already cover the cost risk |
+| Email confirmation before first check | Kept | Needed for the free-tier abuse protection |
+| Reminder cadence | One cron run per day at 06:00 UTC | Works on every Vercel plan |
+| Pro input cost | Review + extraction both send the full contract (~2× input tokens) | Extraction must see the contract; `ANTHROPIC_EXTRACTION_MODEL` can point at a cheaper model after an eval |

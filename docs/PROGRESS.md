@@ -13,4 +13,4 @@ Work list built from `docs/PRD.md` (§7 known issues, §8 open questions) and th
 | 7 | No team ownership transfer or team deletion | PRD §7 | Done |
 | 8 | Unverified "Trusted by early UK contractors" claim | PRD §8 | Done |
 | 9 | Extraction quality unmeasured: build the eval harness | PRD §7 | Done (running it needs an API key) |
-| 10 | Record all open-question defaults | PRD §8 | |
+| 10 | Record all open-question defaults | PRD §8 | Done |

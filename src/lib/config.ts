@@ -60,10 +60,19 @@ export const PROMPT_VERSION = "2026-09-30.1";
 /** Bump when the deadline-extraction prompt or schema changes. */
 export const EXTRACTION_VERSION = "2026-09-29.1";
 
-export function appOrigin(req: Request): string {
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
+/**
+ * Where to send people back to (Stripe, emails). Never a per-deployment *.vercel.app URL
+ * in production: those sit behind Vercel's login wall.
+ */
+export function resolveAppOrigin(env: Env, requestOrigin: string | null, requestUrl: string): string {
+  const configured = env.NEXT_PUBLIC_APP_URL?.trim();
   if (configured) return configured.replace(/\/+$/, "");
-  const origin = req.headers.get("origin");
-  if (origin) return origin;
-  return new URL(req.url).origin;
+  const prodDomain = env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  if (env.VERCEL_ENV === "production" && prodDomain) return `https://${prodDomain.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
+  if (requestOrigin) return requestOrigin;
+  return new URL(requestUrl).origin;
+}
+
+export function appOrigin(req: Request): string {
+  return resolveAppOrigin(process.env, req.headers.get("origin"), req.url);
 }

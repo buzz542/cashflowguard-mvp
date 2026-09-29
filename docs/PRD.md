@@ -143,8 +143,8 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 1. What is the intended free allowance? **Default shipped:** 1 per person (canonical email), lifetime, plus 3/IP/day and 200/day service-wide. All env-configurable.
 2. Should photo reading (an AI call per page) count against the free allowance? **Default shipped (Phase 4):** only while a free check remains, 12 pages/day per person, 2000/day service-wide. PDF/Word/text uncapped.
 3. Is "Unlimited" for Pro meant literally? **Default shipped:** unlimited with a fair-use cap of 20/hour, disclosed in the Terms.
-4. Is £19/month inclusive of VAT? Is there an annual plan or a trial? (Server accepts `trialing`; checkout doesn't configure a trial.)
-5. Are promo codes intentionally enabled at checkout (`allow_promotion_codes: true`)? Left on.
+4. VAT, annual plan, trial. **Default shipped:** unchanged: £19/month, no VAT added (live price is tax-exclusive but checkout has no automatic tax), no annual plan, no trial. **Needs you** if you are VAT-registered (see DECISIONS.md).
+5. Promo codes at checkout. **Default shipped:** left on.
 6. Should `past_due` (card retry in progress) keep Pro? **Default shipped:** no, only `active`/`trialing` (same as before).
 
 **Accounts and identity**
@@ -153,10 +153,10 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 9. ~~Email verification~~: back via Supabase confirmation (needs custom SMTP in production).
 
 **Scope of the review**
-10. Is FIDIC in scope? It's in the prompt but not in marketing.
-11. Is the product England & Wales only, or also Scotland (different law) and Northern Ireland? Copy says "UK" and "English law" interchangeably.
-12. Is "under 25 staff" enforced anywhere? (Positioning only.)
-13. Are main contractors or clients reviewing their own contracts an intended use? The role dropdown excludes them.
+10. FIDIC. **Default shipped:** stays in the prompt as a recognised form; not marketed.
+11. Jurisdiction. **Default shipped:** reviews are framed on English law (unchanged prompt); deadline reminders handle bank holidays for all three UK nations.
+12. "Under 25 staff". **Default shipped:** positioning only; team size capped at 25 people.
+13. Main contractors / clients. **Default shipped:** not a target; role dropdown unchanged.
 14. Scanned PDFs. **Default shipped:** read by Claude, max 20 pages per file, each page counted like a photo page.
 
 **Roadmap definitions**
@@ -167,15 +167,15 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 19. When the contract doesn't say calendar or working days. **Default shipped:** use whichever date is earlier, and say so in the UI and email. Alternative would be to follow the Construction Act's counting rules, which is closer to a legal interpretation.
 
 **Brand, domain and claims**
-20. Canonical domain: `guardconstruct.com` (code fallback, Stripe redirects) or `cashflowguard-mvp.vercel.app`? Needed for auth and reminder email sending (DNS).
+20. Canonical domain. **Default shipped:** `guardconstruct.com` (attached to the Vercel project). Production redirects use it automatically via `VERCEL_PROJECT_PRODUCTION_URL` unless `NEXT_PUBLIC_APP_URL` is set.
 21. "Trusted by early UK contractors". **Default shipped:** relabelled "Built for UK trades" (no unverified endorsement claim under ASA/CAP rules). Put a real claim back once you have customers who agree to it.
 22. Model. **Default shipped:** unchanged `claude-sonnet-4-5`, now `ANTHROPIC_MODEL`. Newer models exist; switching changes cost and output and should be tested on real contracts first.
 
 **Legal/compliance**
-23. Privacy policy says Anthropic processes documents "solely" to extract text and summarise. Has Anthropic's commercial data-retention position been checked and should it be stated?
-24. Terms cap liability at the greater of £50 or 3 months' fees. Has this been reviewed by anyone qualified?
-25. Who is the data controller: a company or a sole trader? The privacy policy says "GuardConstruct (we)" without a legal entity or address.
-26. Supabase region: the privacy policy should name where data is hosted once the project is created.
+23. Anthropic data retention statement. **Needs you:** check your Anthropic commercial terms/DPA and add one sentence to the privacy policy.
+24. Liability cap. **Needs you:** a qualified review; unchanged.
+25. Data controller identity. **Needs you:** legal name and address for the privacy policy.
+26. Supabase region. **Needs you:** name it in the privacy policy once the project exists.
 
 ## 9. Build log
 
