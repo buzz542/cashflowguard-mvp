@@ -8,18 +8,22 @@ import {
   withEntitlements,
   isProEmail,
   PRO_ACCOUNTS,
-  type User
+  loadReviews,
+  saveReview,
+  type User,
+  type SavedReview
 } from "./ProfileMenu";
 import { hashPassword, verifyPassword } from "@/lib/password";
 
 export default function HomePage() {
   const [view, setView] = useState<"marketing" | "app">("marketing");
   const [user, setUser] = useState<User | null>(null);
+  const [reviews, setReviews] = useState<SavedReview[]>([]);
   const [authMode, setAuthMode] = useState<"login" | "signup" | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
-  const [step, setStep] = useState<"landing" | "context" | "upload" | "loading" | "results">(
+  const [step, setStep] = useState<"landing" | "context" | "upload" | "loading" | "results" | "history">(
     "landing"
   );
   const [context, setContext] = useState({
@@ -36,9 +40,12 @@ export default function HomePage() {
   const [showSubscribe, setShowSubscribe] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [pendingCheckout, setPendingCheckout] = useState(false);
-  const [portalLoading, setPortalLoading] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const refreshReviews = (emailAddr: string) => {
+    setReviews(loadReviews(emailAddr));
+  };
 
   useEffect(() => {
     try {
@@ -52,6 +59,7 @@ export default function HomePage() {
         setUser(restored);
         localStorage.setItem("gc_user", JSON.stringify(restored));
         localStorage.setItem("gc_user_" + restored.email, JSON.stringify(restored));
+        refreshReviews(restored.email);
       }
     } catch {
       /* ignore */
@@ -103,10 +111,12 @@ export default function HomePage() {
     setUser(next);
     localStorage.setItem("gc_user", JSON.stringify(next));
     localStorage.setItem("gc_user_" + next.email, JSON.stringify(next));
+    refreshReviews(next.email);
   };
 
   const logout = () => {
     setUser(null);
+    setReviews([]);
     localStorage.removeItem("gc_user");
     setView("marketing");
     setStep("landing");
@@ -143,7 +153,6 @@ export default function HomePage() {
 
   const openBillingPortal = async () => {
     if (!user?.email) return;
-    setPortalLoading(true);
     try {
       const res = await fetch("/api/portal", {
         method: "POST",
@@ -156,7 +165,6 @@ export default function HomePage() {
       else throw new Error("No portal URL");
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Could not open billing portal");
-      setPortalLoading(false);
     }
   };
 
@@ -175,14 +183,13 @@ export default function HomePage() {
         setAuthError("Account exists. Please log in.");
         return;
       }
-      const u: User = {
+      saveUser({
         email: normalised,
         passwordHash,
         freeUsed: false,
         isPro: isProEmail(normalised),
         name: PRO_ACCOUNTS[normalised] || normalised.split("@")[0]
-      };
-      saveUser(u);
+      });
     } else {
       const stored = localStorage.getItem("gc_user_" + normalised);
       if (!stored) {
@@ -210,14 +217,13 @@ export default function HomePage() {
           setAuthError("Incorrect password.");
           return;
         }
-        const next: User = {
+        saveUser({
           email: normalised,
           passwordHash,
           freeUsed: !!u.freeUsed,
           isPro: isProEmail(normalised) ? true : !!u.isPro,
           name: PRO_ACCOUNTS[normalised] || u.name || normalised.split("@")[0]
-        };
-        saveUser(next);
+        });
       }
     }
     setAuthMode(null);
@@ -261,6 +267,21 @@ export default function HomePage() {
     setError("");
     setView("app");
     setStep("context");
+  };
+
+  const openPastReviews = () => {
+    if (!user) {
+      setAuthMode("login");
+      return;
+    }
+    setView("app");
+    setStep("history");
+  };
+
+  const openReview = (r: SavedReview) => {
+    setResult(r.result);
+    setView("app");
+    setStep("results");
   };
 
   const processFiles = async (files: FileList | null) => {
@@ -320,6 +341,15 @@ export default function HomePage() {
         saveUser({ ...user, isPro: true, freeUsed: false });
       }
       setResult(data.result);
+      const saved = saveReview(user.email, {
+        id: String(Date.now()),
+        createdAt: new Date().toISOString(),
+        trade: context.trade || "Contract check",
+        role: context.role || "",
+        preview: contractText.slice(0, 120),
+        result: data.result
+      });
+      setReviews(saved);
       setStep("results");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -327,21 +357,71 @@ export default function HomePage() {
     }
   };
 
+  const scrollTo = (id: string) => {
+    setView("marketing");
+    setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+    }, 50);
+  };
+
   const FooterLinks = () => (
-    <footer className="border-t py-6 text-center text-xs text-gray-500 space-y-2">
+    <footer className="border-t py-8 text-center text-xs text-gray-500 space-y-2">
       <p>GuardConstruct · Not legal advice · Automated AI summaries only</p>
       <p className="space-x-3">
-        <Link href="/privacy" className="text-blue-600 hover:underline">
-          Privacy
-        </Link>
-        <Link href="/terms" className="text-blue-600 hover:underline">
-          Terms
-        </Link>
+        <Link href="/privacy" className="text-blue-600 hover:underline">Privacy</Link>
+        <Link href="/terms" className="text-blue-600 hover:underline">Terms</Link>
         <a href="mailto:tobyburrows1@icloud.com" className="text-blue-600 hover:underline">
           Report a problem
         </a>
       </p>
     </footer>
+  );
+
+  const NavBar = () => (
+    <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b">
+      <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+        <button
+          type="button"
+          className="flex items-center gap-2 shrink-0"
+          onClick={() => { setView("marketing"); setStep("landing"); }}
+        >
+          <img src="/logo.svg" alt="GuardConstruct logo" className="h-8 w-auto" />
+          <span className="font-bold hidden sm:inline">
+            Guard<span className="text-blue-600">Construct</span>
+          </span>
+        </button>
+        <nav className="hidden md:flex items-center gap-5 text-sm text-gray-600">
+          <button type="button" className="hover:text-gray-900" onClick={() => scrollTo("how")}>How it works</button>
+          <button type="button" className="hover:text-gray-900" onClick={() => scrollTo("features")}>Features</button>
+          <button type="button" className="hover:text-gray-900" onClick={() => scrollTo("pricing")}>Pricing</button>
+          <button type="button" className="hover:text-gray-900" onClick={openPastReviews}>Past reviews</button>
+          <button type="button" className="hover:text-gray-900" onClick={() => scrollTo("roadmap")}>Roadmap</button>
+        </nav>
+        <div className="flex items-center gap-2 sm:gap-3">
+          {user ? (
+            <ProfileMenu
+              user={user}
+              onLogout={logout}
+              onManageBilling={user.isPro ? openBillingPortal : undefined}
+              reviews={reviews}
+              onOpenReview={openReview}
+              onViewAllReviews={openPastReviews}
+            />
+          ) : (
+            <button type="button" onClick={() => setAuthMode("login")} className="text-sm text-gray-600">
+              Log in
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={startCheck}
+            className="bg-blue-600 text-white text-sm font-semibold px-3 sm:px-4 py-2 rounded-lg"
+          >
+            Check a document
+          </button>
+        </div>
+      </div>
+    </header>
   );
 
   if (authMode) {
@@ -350,78 +430,34 @@ export default function HomePage() {
         <div className="bg-white rounded-2xl border p-6 w-full max-w-sm space-y-4">
           <h1 className="text-xl font-bold text-center">
             {pendingCheckout
-              ? authMode === "signup"
-                ? "Create account to get Pro"
-                : "Log in to get Pro"
-              : authMode === "signup"
-                ? "Create account"
-                : "Log in"}
+              ? authMode === "signup" ? "Create account to get Pro" : "Log in to get Pro"
+              : authMode === "signup" ? "Create account" : "Log in"}
           </h1>
           <form onSubmit={handleAuth} className="space-y-3">
-            <input
-              type="email"
-              required
-              autoComplete="email"
-              placeholder="Email"
-              className="w-full rounded-lg border px-3 py-2.5"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <input
-              type="password"
-              required
+            <input type="email" required autoComplete="email" placeholder="Email"
+              className="w-full rounded-lg border px-3 py-2.5" value={email}
+              onChange={(e) => setEmail(e.target.value)} />
+            <input type="password" required minLength={8}
               autoComplete={authMode === "signup" ? "new-password" : "current-password"}
               placeholder="Password (min 8 characters)"
-              className="w-full rounded-lg border px-3 py-2.5"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              minLength={8}
-            />
+              className="w-full rounded-lg border px-3 py-2.5" value={password}
+              onChange={(e) => setPassword(e.target.value)} />
             {authError && <p className="text-sm text-red-600">{authError}</p>}
-            <button
-              type="submit"
-              className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl"
-            >
+            <button type="submit" className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl">
               {pendingCheckout
-                ? authMode === "signup"
-                  ? "Create account & continue to Stripe"
-                  : "Log in & continue to Stripe"
-                : authMode === "signup"
-                  ? "Create account"
-                  : "Log in"}
+                ? authMode === "signup" ? "Create account & continue to Stripe" : "Log in & continue to Stripe"
+                : authMode === "signup" ? "Create account" : "Log in"}
             </button>
           </form>
           <p className="text-xs text-center text-gray-500">
             {authMode === "signup" ? (
-              <>
-                Have an account?{" "}
-                <button type="button" className="text-blue-600" onClick={() => setAuthMode("login")}>
-                  Log in
-                </button>
-              </>
+              <>Have an account? <button type="button" className="text-blue-600" onClick={() => setAuthMode("login")}>Log in</button></>
             ) : (
-              <>
-                New?{" "}
-                <button
-                  type="button"
-                  className="text-blue-600"
-                  onClick={() => setAuthMode("signup")}
-                >
-                  Sign up
-                </button>
-              </>
+              <>New? <button type="button" className="text-blue-600" onClick={() => setAuthMode("signup")}>Sign up</button></>
             )}
           </p>
-          <button
-            type="button"
-            className="text-xs text-gray-400 w-full"
-            onClick={() => {
-              setAuthMode(null);
-              setPendingCheckout(false);
-            }}
-          >
-            Cancel
-          </button>
+          <button type="button" className="text-xs text-gray-400 w-full"
+            onClick={() => { setAuthMode(null); setPendingCheckout(false); }}>Cancel</button>
         </div>
       </div>
     );
@@ -436,20 +472,12 @@ export default function HomePage() {
             Pro is £19/month for unlimited checks. Cancel any time in Manage billing.
           </p>
           {authError && <p className="text-sm text-red-600">{authError}</p>}
-          <button
-            className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl"
-            disabled={checkoutLoading}
-            onClick={startCheckout}
-          >
+          <button className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl"
+            disabled={checkoutLoading} onClick={startCheckout}>
             {checkoutLoading ? "Opening Stripe…" : "Subscribe — £19/month"}
           </button>
-          <button
-            type="button"
-            className="w-full text-sm text-gray-500"
-            onClick={() => setShowSubscribe(false)}
-          >
-            Maybe later
-          </button>
+          <button type="button" className="w-full text-sm text-gray-500"
+            onClick={() => setShowSubscribe(false)}>Maybe later</button>
         </div>
       </div>
     );
@@ -457,100 +485,120 @@ export default function HomePage() {
 
   if (view === "marketing") {
     return (
-      <div className="min-h-screen flex flex-col bg-[#FAFAF9]">
-        <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b">
-          <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <img src="/logo.svg" alt="GuardConstruct logo" className="h-8 w-auto" />
-              <span className="font-bold hidden sm:inline">
-                Guard<span className="text-blue-600">Construct</span>
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              {user ? (
-                <ProfileMenu
-                  user={user}
-                  onLogout={logout}
-                  onManageBilling={user.isPro ? openBillingPortal : undefined}
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setAuthMode("login")}
-                  className="text-sm text-gray-600"
-                >
-                  Log in
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={startCheck}
-                className="bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-lg"
-              >
-                Check a document
-              </button>
-            </div>
-          </div>
-        </header>
-        <section className="max-w-3xl mx-auto px-4 pt-16 pb-12 text-center">
+      <div className="min-h-screen flex flex-col bg-white">
+        <NavBar />
+
+        <section className="max-w-3xl mx-auto px-4 pt-16 pb-14 text-center">
           <p className="text-xs font-semibold tracking-[0.2em] text-blue-600 uppercase mb-5">
             Cash flow protection
           </p>
-          <h1 className="text-4xl sm:text-5xl font-bold text-gray-900">
-            Before you sign it, know what it means.
+          <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 leading-tight">
+            Before you sign it,<br />know what it means.
           </h1>
-          <p className="mt-6 text-lg text-gray-600">
-            Photograph or upload a construction contract. Plain-English payment risks under English
-            law. Automated AI summary — not legal advice.
+          <p className="mt-6 text-lg text-gray-600 max-w-2xl mx-auto">
+            Photograph or upload a construction contract. Get plain-English payment
+            risks under English law — so you get paid on time, not left chasing retention
+            and pay-when-paid clauses.
           </p>
-          <button
-            type="button"
-            onClick={startCheck}
-            className="mt-8 bg-blue-600 text-white font-semibold px-8 py-3.5 rounded-xl"
-          >
+          <button type="button" onClick={startCheck}
+            className="mt-8 bg-blue-600 text-white font-semibold px-8 py-3.5 rounded-xl">
             Check a document — free first pass
           </button>
           <p className="mt-4 text-xs text-gray-500">
-            UK subcontractors under 25 staff. Not legal advice.
+            Built for UK subcontractors and freelancers under 25 staff. Not legal advice.
           </p>
         </section>
-        <section className="bg-white border-y py-12">
-          <div className="max-w-3xl mx-auto px-4 grid sm:grid-cols-2 gap-6">
+
+        <section className="border-y bg-[#FAFAF9] py-10">
+          <p className="text-center text-xs font-semibold tracking-[0.15em] text-gray-400 uppercase mb-4">
+            Trusted by early UK contractors
+          </p>
+          <div className="max-w-4xl mx-auto px-4 flex flex-wrap justify-center gap-x-8 gap-y-2 text-sm text-gray-500">
+            <span>Framing · Groundworks</span>
+            <span>Electrical · Plumbing</span>
+            <span>Joinery · M&E</span>
+            <span>Fit-out · Civils</span>
+          </div>
+        </section>
+
+        <section id="how" className="max-w-4xl mx-auto px-4 py-16">
+          <h2 className="text-2xl font-bold text-center mb-10">How it works</h2>
+          <div className="grid sm:grid-cols-3 gap-6">
+            {[
+              { n: "1", t: "Add context", d: "Trade, package size, role and duration — so the check is weighted to your job." },
+              { n: "2", t: "Upload the contract", d: "Photo, PDF or Word. Multiple pages supported." },
+              { n: "3", t: "Get an action plan", d: "Plain-English payment risks and suggested wording you can send before you sign." }
+            ].map((x) => (
+              <div key={x.n} className="rounded-2xl border p-5 bg-white">
+                <p className="text-blue-600 font-bold text-sm mb-2">Step {x.n}</p>
+                <h3 className="font-semibold text-lg mb-2">{x.t}</h3>
+                <p className="text-sm text-gray-600">{x.d}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section id="features" className="bg-[#FAFAF9] border-y py-16">
+          <div className="max-w-4xl mx-auto px-4">
+            <h2 className="text-2xl font-bold text-center mb-10">Features</h2>
+            <div className="grid sm:grid-cols-2 gap-5">
+              {[
+                "Built around English construction payment traps (JCT / NEC style patterns)",
+                "Retention, pay-when-paid, notice deadlines, LADs and set-off flagged in plain English",
+                "Suggested wording you can copy into an email or message",
+                "Past contract reviews saved on your device",
+                "Photo, PDF and Word upload",
+                "Pro plan for unlimited checks"
+              ].map((f) => (
+                <div key={f} className="flex gap-3 bg-white rounded-xl border p-4 text-sm text-gray-700">
+                  <span className="text-blue-600 font-bold">✓</span>
+                  <span>{f}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="pricing" className="max-w-3xl mx-auto px-4 py-16">
+          <h2 className="text-2xl font-bold text-center mb-10">Pricing</h2>
+          <div className="grid sm:grid-cols-2 gap-6">
             <div className="rounded-2xl border p-6">
               <p className="text-sm font-semibold text-gray-500 uppercase">Free</p>
               <p className="text-3xl font-bold mt-1">£0</p>
-              <p className="text-sm text-gray-600 mt-1 mb-3">One document check</p>
-              <button
-                type="button"
-                onClick={startCheck}
-                className="w-full border font-semibold py-2.5 rounded-xl"
-              >
-                Start free check
-              </button>
+              <p className="text-sm text-gray-600 mt-1 mb-4">One document check</p>
+              <button type="button" onClick={startCheck}
+                className="w-full border font-semibold py-2.5 rounded-xl">Start free check</button>
             </div>
             <div className="rounded-2xl border-2 border-blue-600 p-6">
               <p className="text-sm font-semibold text-gray-500 uppercase">Pro</p>
               <p className="text-3xl font-bold mt-1">
                 £19<span className="text-base text-gray-500">/month</span>
               </p>
-              <p className="text-sm text-gray-600 mt-1 mb-3">
-                Unlimited checks · Cancel any time
-              </p>
-              <button
-                type="button"
-                onClick={goPro}
-                disabled={checkoutLoading}
-                className="w-full bg-blue-600 text-white font-semibold py-2.5 rounded-xl disabled:opacity-60"
-              >
-                {checkoutLoading
-                  ? "Opening Stripe…"
-                  : user?.isPro
-                    ? "You’re on Pro"
-                    : "Get Pro — £19/month"}
+              <p className="text-sm text-gray-600 mt-1 mb-4">Unlimited checks · Cancel any time</p>
+              <button type="button" onClick={goPro} disabled={checkoutLoading}
+                className="w-full bg-blue-600 text-white font-semibold py-2.5 rounded-xl disabled:opacity-60">
+                {checkoutLoading ? "Opening Stripe…" : user?.isPro ? "You’re on Pro" : "Get Pro — £19/month"}
               </button>
             </div>
           </div>
         </section>
+
+        <section id="roadmap" className="bg-[#FAFAF9] border-t py-16">
+          <div className="max-w-3xl mx-auto px-4 text-center">
+            <h2 className="text-2xl font-bold mb-4">Roadmap</h2>
+            <p className="text-gray-600 text-sm mb-8">
+              What we’re building next for small UK contractors.
+            </p>
+            <ul className="text-left space-y-3 text-sm text-gray-700 max-w-md mx-auto">
+              <li className="bg-white border rounded-xl px-4 py-3">✓ Live: contract photo / PDF / Word checks</li>
+              <li className="bg-white border rounded-xl px-4 py-3">✓ Live: action plan + suggested wording</li>
+              <li className="bg-white border rounded-xl px-4 py-3">→ Cloud history across devices</li>
+              <li className="bg-white border rounded-xl px-4 py-3">→ Team seats for small firms</li>
+              <li className="bg-white border rounded-xl px-4 py-3">→ Notice deadline reminders</li>
+            </ul>
+          </div>
+        </section>
+
         <FooterLinks />
       </div>
     );
@@ -558,167 +606,133 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAFAF9]">
-      <header className="bg-white border-b sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => {
-              setView("marketing");
-              setStep("landing");
-            }}
-            className="flex items-center gap-2"
-          >
-            <img src="/logo.svg" alt="GuardConstruct logo" className="h-7 w-auto" />
-            <span className="font-bold hidden sm:inline">
-              Guard<span className="text-blue-600">Construct</span>
-            </span>
-          </button>
-          {user && (
-            <ProfileMenu
-              user={user}
-              onLogout={logout}
-              onManageBilling={user.isPro || portalLoading ? openBillingPortal : undefined}
-            />
-          )}
-        </div>
-      </header>
+      <NavBar />
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-6 pb-24">
         {step === "landing" && (
           <div className="bg-white rounded-2xl border p-5 space-y-3">
             <h1 className="text-2xl font-bold">Check a document</h1>
-            <button
-              type="button"
-              onClick={startCheck}
-              className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl"
-            >
+            {user && (
+              <p className="text-sm text-gray-600">
+                Signed in as <strong>{user.email}</strong> · Plan:{" "}
+                <strong className={user.isPro ? "text-blue-600" : ""}>
+                  {user.isPro ? "Pro" : "Free"}
+                </strong>
+              </p>
+            )}
+            <button type="button" onClick={startCheck}
+              className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl">
               Start a new check →
+            </button>
+            <button type="button" onClick={openPastReviews}
+              className="w-full border font-semibold py-3 rounded-xl text-sm">
+              Past contract reviews
             </button>
           </div>
         )}
+
+        {step === "history" && (
+          <div className="bg-white rounded-2xl border p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h1 className="text-2xl font-bold">Past contract reviews</h1>
+              <button type="button" className="text-sm text-blue-600" onClick={() => setStep("landing")}>
+                Back
+              </button>
+            </div>
+            {reviews.length === 0 ? (
+              <p className="text-sm text-gray-500">No reviews saved on this device yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {reviews.map((r) => (
+                  <li key={r.id}>
+                    <button
+                      type="button"
+                      onClick={() => openReview(r)}
+                      className="w-full text-left rounded-xl border px-4 py-3 hover:bg-gray-50"
+                    >
+                      <p className="font-medium text-sm">{r.trade || "Contract check"}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {new Date(r.createdAt).toLocaleString("en-GB")} · {r.role || "—"}
+                      </p>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
         {step === "context" && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              setStep("upload");
-            }}
-            className="bg-white rounded-2xl border p-5 space-y-4"
-          >
+          <form onSubmit={(e) => { e.preventDefault(); setStep("upload"); }}
+            className="bg-white rounded-2xl border p-5 space-y-4">
             <h1 className="text-2xl font-bold">About this job</h1>
-            <input
-              required
-              placeholder="Trade / work"
-              className="w-full rounded-lg border px-3 py-2.5"
-              value={context.trade}
-              onChange={(e) => setContext({ ...context, trade: e.target.value })}
-            />
-            <select
-              required
-              className="w-full rounded-lg border px-3 py-2.5"
-              value={context.projectSize}
-              onChange={(e) => setContext({ ...context, projectSize: e.target.value })}
-            >
+            <input required placeholder="Trade / work" className="w-full rounded-lg border px-3 py-2.5"
+              value={context.trade} onChange={(e) => setContext({ ...context, trade: e.target.value })} />
+            <select required className="w-full rounded-lg border px-3 py-2.5" value={context.projectSize}
+              onChange={(e) => setContext({ ...context, projectSize: e.target.value })}>
               <option value="">Package size</option>
               <option value="Under £10k">Under £10,000</option>
               <option value="£10k–£50k">£10,000 – £50,000</option>
               <option value="£50k–£250k">£50,000 – £250,000</option>
               <option value="£250k+">£250,000+</option>
             </select>
-            <select
-              required
-              className="w-full rounded-lg border px-3 py-2.5"
-              value={context.duration}
-              onChange={(e) => setContext({ ...context, duration: e.target.value })}
-            >
+            <select required className="w-full rounded-lg border px-3 py-2.5" value={context.duration}
+              onChange={(e) => setContext({ ...context, duration: e.target.value })}>
               <option value="">Duration</option>
               <option value="Under 1 month">Under 1 month</option>
               <option value="1–3 months">1–3 months</option>
               <option value="3–6 months">3–6 months</option>
               <option value="6+ months">6+ months</option>
             </select>
-            <select
-              required
-              className="w-full rounded-lg border px-3 py-2.5"
-              value={context.role}
-              onChange={(e) => setContext({ ...context, role: e.target.value })}
-            >
+            <select required className="w-full rounded-lg border px-3 py-2.5" value={context.role}
+              onChange={(e) => setContext({ ...context, role: e.target.value })}>
               <option value="">Your role</option>
               <option value="Subcontractor">Subcontractor</option>
               <option value="Sub-subcontractor">Sub-subcontractor</option>
               <option value="Direct to client">Direct to client</option>
               <option value="Freelance / labour-only">Freelance / labour-only</option>
             </select>
-            <button
-              type="submit"
-              className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl"
-            >
+            <button type="submit" className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl">
               Continue →
             </button>
           </form>
         )}
+
         {step === "upload" && (
           <div className="bg-white rounded-2xl border p-5 space-y-4">
             <h1 className="text-2xl font-bold">Add the document</h1>
-            <input
-              ref={photoRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={(e) => processFiles(e.target.files)}
-            />
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
+            <input ref={photoRef} type="file" accept="image/*" capture="environment" className="hidden"
+              onChange={(e) => processFiles(e.target.files)} />
+            <input ref={fileRef} type="file" multiple
               accept="application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.txt,text/plain,image/*"
-              className="hidden"
-              onChange={(e) => processFiles(e.target.files)}
-            />
+              className="hidden" onChange={(e) => processFiles(e.target.files)} />
             <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                disabled={extracting}
-                onClick={() => photoRef.current?.click()}
-                className="border-2 border-dashed rounded-xl py-5 text-sm font-medium"
-              >
+              <button type="button" disabled={extracting} onClick={() => photoRef.current?.click()}
+                className="border-2 border-dashed rounded-xl py-5 text-sm font-medium">
                 {extracting ? "Reading…" : "📷 Take photo"}
               </button>
-              <button
-                type="button"
-                disabled={extracting}
-                onClick={() => fileRef.current?.click()}
-                className="border-2 border-dashed rounded-xl py-5 text-sm font-medium"
-              >
+              <button type="button" disabled={extracting} onClick={() => fileRef.current?.click()}
+                className="border-2 border-dashed rounded-xl py-5 text-sm font-medium">
                 {extracting ? "Reading…" : "📄 Upload PDF / Word"}
               </button>
             </div>
             {pages.length > 0 && (
               <ul className="text-sm space-y-1">
                 {pages.map((p, i) => (
-                  <li key={i} className="bg-gray-50 rounded-lg px-3 py-2">
-                    {i + 1}. {p}
-                  </li>
+                  <li key={i} className="bg-gray-50 rounded-lg px-3 py-2">{i + 1}. {p}</li>
                 ))}
               </ul>
             )}
-            <textarea
-              rows={4}
-              placeholder="Or paste contract text…"
+            <textarea rows={4} placeholder="Or paste contract text…"
               className="w-full rounded-lg border px-3 py-2.5 text-sm"
-              value={contractText}
-              onChange={(e) => setContractText(e.target.value)}
-            />
+              value={contractText} onChange={(e) => setContractText(e.target.value)} />
             {error && <p className="text-sm text-red-600">{error}</p>}
-            <button
-              type="button"
-              onClick={runReview}
-              disabled={extracting || !contractText.trim()}
-              className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl disabled:opacity-50"
-            >
+            <button type="button" onClick={runReview} disabled={extracting || !contractText.trim()}
+              className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl disabled:opacity-50">
               Run check →
             </button>
           </div>
         )}
+
         {step === "loading" && (
           <div className="text-center py-16">
             <div className="text-3xl animate-pulse">⏳</div>
@@ -726,15 +740,12 @@ export default function HomePage() {
             <p className="text-sm text-gray-500 mt-2">Automated AI summary — not legal advice</p>
           </div>
         )}
+
         {step === "results" && (
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h1 className="text-2xl font-bold">Your action plan</h1>
-              <button
-                type="button"
-                className="text-sm text-blue-600"
-                onClick={() => setStep("landing")}
-              >
+              <button type="button" className="text-sm text-blue-600" onClick={() => setStep("landing")}>
                 Done
               </button>
             </div>
@@ -747,11 +758,8 @@ export default function HomePage() {
             <div className="bg-white rounded-2xl border p-5">
               <ReviewResults result={result} />
             </div>
-            <button
-              type="button"
-              onClick={startCheck}
-              className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl"
-            >
+            <button type="button" onClick={startCheck}
+              className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl">
               Start another check →
             </button>
           </div>
