@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from "react";
 
 export type User = {
   email: string;
-  password: string;
+  /** SHA-256 password verifier — never plaintext */
+  passwordHash: string;
   freeUsed: boolean;
   isPro?: boolean;
   name?: string;
@@ -32,7 +33,15 @@ export function withEntitlements(u: User): User {
   return { ...u, email, name: u.name || email.split("@")[0] };
 }
 
-export function ProfileMenu({ user, onLogout }: { user: User; onLogout: () => void }) {
+export function ProfileMenu({
+  user,
+  onLogout,
+  onManageBilling
+}: {
+  user: User;
+  onLogout: () => void;
+  onManageBilling?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const initial = (user.name || user.email || "?").charAt(0).toUpperCase();
@@ -85,11 +94,19 @@ export function ProfileMenu({ user, onLogout }: { user: User; onLogout: () => vo
               <span className="text-gray-500 shrink-0">Email</span>
               <span className="font-medium text-gray-800 text-right truncate">{user.email}</span>
             </div>
-            <div className="flex justify-between gap-2">
-              <span className="text-gray-500 shrink-0">Name</span>
-              <span className="font-medium text-gray-800 text-right truncate">{user.name || "—"}</span>
-            </div>
           </div>
+          {onManageBilling && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                onManageBilling();
+              }}
+              className="w-full text-left text-sm text-blue-600 font-medium py-2 px-1 rounded-lg hover:bg-blue-50"
+            >
+              Manage billing / cancel
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
