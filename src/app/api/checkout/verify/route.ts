@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Missing session_id" }, { status: 400 });
     }
 
-    const stripe = new Stripe(secret, { apiVersion: "2024-11-20.acacia" as any });
+    const stripe = new Stripe(secret);
     const session = await stripe.checkout.sessions.retrieve(sessionId);
 
     const paid =
