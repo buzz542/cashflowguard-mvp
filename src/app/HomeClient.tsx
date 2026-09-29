@@ -10,6 +10,7 @@ import { DeadlinesPanel, DeadlinesView } from "./DeadlinesPanel";
 import { TeamView } from "./TeamPanel";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
 import { prepareUpload } from "@/lib/uploadPrep";
+import { DRAFT_KEY, parseDraft, type Draft } from "@/lib/draft";
 import type { Me, ReviewSummary, ApiError, ObligationRow, JobRow, TeamInfo } from "@/lib/clientTypes";
 
 type Step = "landing" | "context" | "upload" | "loading" | "results" | "history" | "deadlines" | "team";
@@ -114,6 +115,48 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
   // Load history, and look for pre-accounts reviews on this device for this email.
   const userId = user?.id;
   const userEmail = user?.email;
+
+  // Keep the check in progress across refresh/back (per tab; see lib/draft.ts).
+  useEffect(() => {
+    let draft: Draft | null = null;
+    if (view === "app" && (step === "context" || step === "upload")) draft = { step, context, contractText, pages };
+    else if (view === "app" && step === "loading") draft = { step: "loading" };
+    else if (view === "app" && step === "results" && reviewId) draft = { step: "results", reviewId };
+    try {
+      if (draft) sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      else if (view === "app" && step === "landing") sessionStorage.removeItem(DRAFT_KEY);
+    } catch {
+      /* storage full or unavailable: nothing to restore later */
+    }
+  }, [view, step, context, contractText, pages, reviewId]);
+
+  const openReviewRef = useRef<(id: string) => Promise<void>>();
+  const restoredFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!userId || restoredFor.current === userId) return;
+    restoredFor.current = userId;
+    let draft: Draft | null = null;
+    try {
+      draft = parseDraft(sessionStorage.getItem(DRAFT_KEY));
+    } catch {
+      return;
+    }
+    if (!draft) return;
+    if (draft.step === "results") {
+      void openReviewRef.current?.(draft.reviewId);
+    } else if (draft.step === "loading") {
+      // The check was already running (and charged). Don't invite a second run.
+      setView("app");
+      setStep("history");
+      setBanner("The page reloaded while your check was running. If it finished, it's in your past reviews below.");
+    } else {
+      setContext(draft.context);
+      setContractText(draft.contractText);
+      setPages(draft.pages);
+      setView("app");
+      setStep(draft.step);
+    }
+  }, [userId]);
   useEffect(() => {
     if (!userId || !userEmail) {
       setReviews([]);
@@ -233,6 +276,11 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
   }, [refreshMe]);
 
   const logout = async () => {
+    try {
+      sessionStorage.removeItem(DRAFT_KEY);
+    } catch {
+      /* ignore */
+    }
     await getSupabaseBrowser()?.auth.signOut();
     setMe((m) => (m ? { accountsEnabled: m.accountsEnabled, user: null } : m));
     setView("marketing");
@@ -335,6 +383,7 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
   };
 
   const openReview = async (id: string) => {
+    setReviewId(id);
     setError("");
     const res = await fetch("/api/reviews/" + encodeURIComponent(id), { cache: "no-store" });
     const data = await readJson<{
@@ -355,6 +404,8 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
     setView("app");
     setStep("results");
   };
+
+  openReviewRef.current = openReview;
 
   const toggleReminderEmails = async (on: boolean) => {
     const res = await fetch("/api/me/preferences", {

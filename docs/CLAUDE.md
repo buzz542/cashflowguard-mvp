@@ -224,7 +224,7 @@ Files are processed in memory and never persisted. The client continues past a f
 2. **Timeouts**: review is non-streaming with `max_tokens: 8000` under `maxDuration: 60`. Long contracts could exceed it.
 3. ~~**Scanned PDFs** rejected~~ Fixed: transcribed by Claude.
 4. **In-memory rate limits** (per-user hourly, extract) reset on cold start. The free tier itself is durable.
-5. **No routing for app steps**: refresh loses a check in progress.
+5. ~~**Refresh loses a check in progress**~~ Fixed: `lib/draft.ts` keeps the draft in sessionStorage (cleared on logout and when the tab closes).
 6. **Markdown renderer** doesn't render lists/links/tables as such.
 7. **Account deletion** is by email request (privacy policy). No self-service button.
 8. **Supabase auth emails** need custom SMTP in production; the default sender is heavily rate-limited.

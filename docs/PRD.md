@@ -129,7 +129,7 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 - ~~Free tier resettable by clearing the browser or using a new email alias.~~ Fixed in Phase 1.
 - ~~Photos/PDFs over ~4.5MB fail on Vercel.~~ Fixed: photos are shrunk in the browser to 1568px JPEG before upload (a 23MB photo uploads as ~1MB); other files over 4MB get a clear message before upload.
 - ~~Scanned PDFs are rejected instead of OCR'd.~~ Fixed: read by Claude (up to 20 pages per file).
-- Refresh/back mid-flow loses the check in progress (saved reviews are safe).
+- ~~Refresh/back mid-flow loses the check in progress.~~ Fixed: the draft is kept per tab and restored; a reload mid-check goes to past reviews instead of re-running.
 - Email confirmation is now required before the first free check: more friction between landing and first value.
 - **Deadline extraction has not been measured against real contracts.** It's tested for shape and safety (bad output is dropped, not guessed), not for how often it finds the right deadlines. Needs an eval on a set of real JCT/NEC/bespoke subcontracts before it's marketed hard.
 - Team owners can't transfer ownership or delete a team from the app (support request needed).

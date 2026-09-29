@@ -31,3 +31,4 @@ Product and technical choices made without asking, per the instruction to pick t
 | Linting | `next lint` with `next/core-web-vitals` (ESLint 8, matching Next 14) | Standard for this stack; no config existed |
 | Large uploads | Shrink photos in the browser to 1568px long edge, JPEG (quality 0.85, falling back to 0.7/0.5); refuse other files over 4MB up front | Claude downsizes to ~1568px anyway; avoids new storage infrastructure for direct uploads |
 | Scanned PDFs | Send to Claude as a PDF document block; max 20 pages; each page counts as a photo page for free users; cut-off transcriptions are refused | Reuses the photo path and caps; 20 pages fits one 16k-token response |
+| Refresh during a check | Keep the draft (job details, text, page names, open review id) in sessionStorage; a reload mid-check goes to Past reviews with a note rather than re-running | No routing rewrite needed; per-tab, cleared on tab close and logout; avoids a second paid run |
