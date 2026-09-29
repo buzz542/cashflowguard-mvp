@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
+// Must be dynamic — uses searchParams and Stripe at request time
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 export async function GET(req: NextRequest) {
   try {
     const secret = process.env.STRIPE_SECRET_KEY;
@@ -28,7 +32,7 @@ export async function GET(req: NextRequest) {
       mode: session.mode
     });
   } catch (error: any) {
-    console.error("Verify error:", error);
+    console.error("Checkout verify error:", error);
     return NextResponse.json(
       { error: error.message || "Verify failed" },
       { status: 500 }
