@@ -13,8 +13,13 @@ import { ukToday } from "./deadlines";
  * Returns `{ ok: true, refund }` or `{ ok: false, response }`.
  */
 export async function claimPhotoPage(user: User, email: string, activeWorkspaceId?: string | null) {
+  return claimPhotoPages(user, email, activeWorkspaceId, 1);
+}
+
+/** Same, for `pages` pages at once (scanned PDFs). All or nothing. */
+export async function claimPhotoPages(user: User, email: string, activeWorkspaceId: string | null | undefined, pages: number) {
   const ctx = await loadWorkspaceContext(user, email, activeWorkspaceId);
-  if (ctx.isPro) return { ok: true as const, refund: async () => undefined };
+  if (ctx.isPro) return { ok: true as const, refund: async (): Promise<void> => undefined };
 
   const admin = getSupabaseAdmin();
   const canonical = canonicalEmail(email);
@@ -29,19 +34,33 @@ export async function claimPhotoPage(user: User, email: string, activeWorkspaceI
   }
 
   const day = ukToday();
-  const { data, error } = await admin.rpc("claim_ocr_page", {
-    p_user_id: user.id,
-    p_day: day,
-    p_user_daily_limit: config.freeOcrPagesPerDay,
-    p_global_daily_limit: config.freeOcrPagesGlobalPerDay
-  });
-  if (error) throw new Error(`claim_ocr_page: ${error.message}`);
+  const refundN = async (n: number) => {
+    for (let i = 0; i < n; i++) await admin.rpc("refund_ocr_page", { p_user_id: user.id, p_day: day });
+  };
+  let claimed = 0;
+  let data: unknown = "ok";
+  while (claimed < pages) {
+    const res = await admin.rpc("claim_ocr_page", {
+      p_user_id: user.id,
+      p_day: day,
+      p_user_daily_limit: config.freeOcrPagesPerDay,
+      p_global_daily_limit: config.freeOcrPagesGlobalPerDay
+    });
+    if (res.error) {
+      await refundN(claimed);
+      throw new Error(`claim_ocr_page: ${res.error.message}`);
+    }
+    data = res.data;
+    if (data !== "ok") break;
+    claimed++;
+  }
+  if (data !== "ok") await refundN(claimed);
   if (data === "user_limit") {
     return {
       ok: false as const,
       response: jsonError(
         429,
-        `Free accounts can read up to ${config.freeOcrPagesPerDay} photo pages a day. Upload a PDF or Word file, paste the text, or upgrade to Pro.`,
+        `Free accounts can have up to ${config.freeOcrPagesPerDay} photo or scanned pages read a day. Upload a PDF with selectable text or a Word file, paste the text, or upgrade to Pro.`,
         "ocr_limit"
       )
     };
@@ -54,8 +73,6 @@ export async function claimPhotoPage(user: User, email: string, activeWorkspaceI
   }
   return {
     ok: true as const,
-    refund: async () => {
-      await admin.rpc("refund_ocr_page", { p_user_id: user.id, p_day: day });
-    }
+    refund: () => refundN(claimed)
   };
 }

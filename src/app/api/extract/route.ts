@@ -2,61 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import mammoth from "mammoth";
 import { rateLimit } from "@/lib/rateLimit";
 import { requireUser, ACTIVE_WORKSPACE_COOKIE } from "@/lib/session";
-import { claimPhotoPage } from "@/lib/ocrAllowance";
-import { getAnthropic, textFrom } from "@/lib/anthropic";
-import { config } from "@/lib/config";
+import { claimPhotoPage, claimPhotoPages } from "@/lib/ocrAllowance";
+import { getAnthropic } from "@/lib/anthropic";
+import { transcribeImage, transcribeScannedPdf } from "@/lib/transcribe";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-async function extractPdfText(buffer: Buffer): Promise<string> {
+/** Scanned PDFs longer than this are refused: transcription must fit one response. */
+const MAX_SCANNED_PDF_PAGES = 20;
+
+async function extractPdfText(buffer: Buffer): Promise<{ text: string; pages: number }> {
   // Import the implementation directly — avoids pdf-parse's broken default test-file path on Vercel
-  const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (b: Buffer) => Promise<{ text: string }>;
+  const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (b: Buffer) => Promise<{ text: string; numpages: number }>;
   const data = await pdfParse(buffer);
-  return (data.text || "").trim();
+  return { text: (data.text || "").trim(), pages: data.numpages || 1 };
 }
 
-async function extractImageText(buffer: Buffer, mimeType: string): Promise<string> {
+function requireAnthropic() {
   const anthropic = getAnthropic();
-  if (!anthropic) {
-    throw new Error("OCR_UNAVAILABLE");
-  }
-
-  const mediaType = (
-    mimeType === "image/png" || mimeType === "image/gif" || mimeType === "image/webp"
-      ? mimeType
-      : "image/jpeg"
-  ) as "image/jpeg" | "image/png" | "image/gif" | "image/webp";
-
-  const base64 = buffer.toString("base64");
-
-  const message = await anthropic.messages.create({
-    model: config.anthropicModel,
-    max_tokens: 8000,
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: mediaType,
-              data: base64
-            }
-          },
-          {
-            type: "text",
-            text:
-              "This is a photo or scan of a construction contract page. Extract ALL readable text exactly as written, in reading order. Include headings, clause numbers, tables as plain text, and payment terms. Do not summarise. Output only the extracted text."
-          }
-        ]
-      }
-    ]
-  });
-
-  return textFrom(message);
+  if (!anthropic) throw new Error("OCR_UNAVAILABLE");
+  return anthropic;
 }
 
 export async function POST(req: NextRequest) {
@@ -119,26 +86,34 @@ export async function POST(req: NextRequest) {
     }
 
     if (name.endsWith(".pdf") || type === "application/pdf") {
+      let parsed: { text: string; pages: number };
       try {
-        const text = await extractPdfText(buffer);
-        if (!text || text.length < 40) {
-          return NextResponse.json(
-            {
-              error:
-                "This PDF has little selectable text (likely a scan). Photograph each page instead."
-            },
-            { status: 400 }
-          );
+        parsed = await extractPdfText(buffer);
+      } catch (e: unknown) {
+        console.error("PDF extract error:", e instanceof Error ? e.message : e);
+        return NextResponse.json({ error: "Could not read this PDF. Photograph the pages or paste the text." }, { status: 400 });
+      }
+      if (parsed.text.length >= 40) return NextResponse.json({ text: parsed.text, fileName: file.name });
+
+      // No text layer: it's a scan. Read it like photos (counts against the free page cap).
+      if (parsed.pages > MAX_SCANNED_PDF_PAGES) {
+        return NextResponse.json(
+          { error: `This looks like a scanned PDF of ${parsed.pages} pages. Split it into files of up to ${MAX_SCANNED_PDF_PAGES} pages, or photograph the key pages.` },
+          { status: 400 }
+        );
+      }
+      const claim = await claimPhotoPages(auth.user, auth.email, req.cookies.get(ACTIVE_WORKSPACE_COOKIE)?.value, parsed.pages);
+      if (!claim.ok) return claim.response;
+      try {
+        const text = await transcribeScannedPdf(requireAnthropic(), buffer);
+        if (text.length < 40) {
+          return NextResponse.json({ error: "Could not read enough text from this scan. Try photographing the pages in good light." }, { status: 400 });
         }
         return NextResponse.json({ text, fileName: file.name });
       } catch (e: unknown) {
-        console.error("PDF extract error:", e);
-        return NextResponse.json(
-          {
-            error: "Could not read this PDF. Photograph the pages or paste the text."
-          },
-          { status: 400 }
-        );
+        await claim.refund().catch(() => undefined);
+        console.error("Scanned PDF error:", e instanceof Error ? e.message : e);
+        return NextResponse.json({ error: "Could not read this scanned PDF. Photograph the pages or paste the text." }, { status: 500 });
       }
     }
 
@@ -155,7 +130,7 @@ export async function POST(req: NextRequest) {
       const page = await claimPhotoPage(auth.user, auth.email, req.cookies.get(ACTIVE_WORKSPACE_COOKIE)?.value);
       if (!page.ok) return page.response;
       try {
-        const text = await extractImageText(buffer, type || "image/jpeg");
+        const text = await transcribeImage(requireAnthropic(), buffer, type || "image/jpeg");
         if (!text || text.length < 20) {
           return NextResponse.json(
             {

@@ -46,7 +46,7 @@ From the landing page, metadata and system prompt:
 | Terms acceptance | Checkbox at signup + Terms gate before first check; stored per user with version; server refuses checks without it | `AuthModal.tsx`, `api/me/terms`, `api/review` |
 | Job context capture | 4 fields; used to weight severity and estimate exposure, never echoed back | `HomeClient.tsx`, `api/review` |
 | Photo upload + OCR | Camera capture on mobile, Claude vision transcription. JPEG/PNG/GIF/WebP. HEIC rejected. Requires login; capped per day for non-Pro users | `api/extract`, `lib/ocrAllowance.ts` |
-| PDF upload | Text-layer PDFs only. Scanned PDFs rejected with "photograph each page" | `api/extract` |
+| PDF upload | Text-layer PDFs parsed directly. Scanned PDFs (no text) are read by Claude, up to 20 pages, counted against the free photo-page cap | `api/extract`, `lib/transcribe.ts` |
 | Word upload | `.docx` only; `.doc` rejected | `api/extract` |
 | Paste / text upload | `.txt`, `.md`, `.csv` or paste into textarea | `HomeClient.tsx`, `api/extract` |
 | Multi-page | Up to 12 files per selection, more batches allowed; text concatenated. Max 120k chars total | `HomeClient.tsx`, `api/review` |
@@ -128,7 +128,7 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 - ~~Cancelled Pro users still see "Pro".~~ Fixed in Phase 1 (webhook + server-side entitlement).
 - ~~Free tier resettable by clearing the browser or using a new email alias.~~ Fixed in Phase 1.
 - ~~Photos/PDFs over ~4.5MB fail on Vercel.~~ Fixed: photos are shrunk in the browser to 1568px JPEG before upload (a 23MB photo uploads as ~1MB); other files over 4MB get a clear message before upload.
-- Scanned PDFs are rejected instead of OCR'd.
+- ~~Scanned PDFs are rejected instead of OCR'd.~~ Fixed: read by Claude (up to 20 pages per file).
 - Refresh/back mid-flow loses the check in progress (saved reviews are safe).
 - Email confirmation is now required before the first free check: more friction between landing and first value.
 - **Deadline extraction has not been measured against real contracts.** It's tested for shape and safety (bad output is dropped, not guessed), not for how often it finds the right deadlines. Needs an eval on a set of real JCT/NEC/bespoke subcontracts before it's marketed hard.
@@ -157,7 +157,7 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 11. Is the product England & Wales only, or also Scotland (different law) and Northern Ireland? Copy says "UK" and "English law" interchangeably.
 12. Is "under 25 staff" enforced anywhere? (Positioning only.)
 13. Are main contractors or clients reviewing their own contracts an intended use? The role dropdown excludes them.
-14. What should happen with scanned PDFs: add OCR, or keep telling users to photograph pages?
+14. Scanned PDFs. **Default shipped:** read by Claude, max 20 pages per file, each page counted like a photo page.
 
 **Roadmap definitions**
 15. Cloud history retention. **Default shipped:** kept until the user deletes it or asks for account deletion; full contract text never stored. Is a fixed retention period (e.g. 24 months inactive) wanted?

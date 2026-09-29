@@ -199,7 +199,7 @@ Flow: `/api/review` runs `extractObligations()` **in parallel** with the review 
 | `text/*`, `.txt/.md/.csv` | UTF-8 decode |
 | `.docx` | `mammoth.extractRawText` |
 | `.doc` | Rejected |
-| `.pdf` | `pdf-parse` via `pdf-parse/lib/pdf-parse.js`. < 40 chars → rejected as a scan |
+| `.pdf` | `pdf-parse` via `pdf-parse/lib/pdf-parse.js`. < 40 chars → treated as a scan: sent to Claude as a document block (`lib/transcribe.ts`), max 20 pages, pages claimed against the free photo cap |
 | `image/*` (jpeg/png/gif/webp) | Claude vision transcription. < 20 chars → rejected |
 | HEIC/HEIF | Rejected |
 
@@ -222,7 +222,7 @@ Files are processed in memory and never persisted. The client continues past a f
 
 1. ~~**Vercel request body limit**~~ Fixed: `lib/uploadPrep.ts` shrinks photos in the browser; non-image files over 4MB are refused client-side with a clear message.
 2. **Timeouts**: review is non-streaming with `max_tokens: 8000` under `maxDuration: 60`. Long contracts could exceed it.
-3. **Scanned PDFs** rejected rather than OCR'd.
+3. ~~**Scanned PDFs** rejected~~ Fixed: transcribed by Claude.
 4. **In-memory rate limits** (per-user hourly, extract) reset on cold start. The free tier itself is durable.
 5. **No routing for app steps**: refresh loses a check in progress.
 6. **Markdown renderer** doesn't render lists/links/tables as such.
