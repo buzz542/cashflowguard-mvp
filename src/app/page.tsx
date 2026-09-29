@@ -20,6 +20,7 @@ export default function HomePage() {
   const [extracting, setExtracting] = useState(false);
   const [showSubscribe, setShowSubscribe] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [pendingCheckout, setPendingCheckout] = useState(false);
   const photoRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -85,6 +86,33 @@ export default function HomePage() {
 
   const canRun = (u: User | null) => !!u && (u.isPro || !u.freeUsed);
 
+  const startCheckoutWithEmail = async (checkoutEmail?: string) => {
+    setCheckoutLoading(true);
+    setAuthError("");
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: checkoutEmail || user?.email })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Checkout failed");
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      throw new Error("No checkout URL returned");
+    } catch (err: any) {
+      setAuthError(err.message);
+      setCheckoutLoading(false);
+      setShowSubscribe(true);
+    }
+  };
+
+  const startCheckout = async () => {
+    await startCheckoutWithEmail(user?.email);
+  };
+
   const handleAuth = (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError("");
@@ -131,8 +159,29 @@ export default function HomePage() {
       }
     }
     setAuthMode(null);
+    if (pendingCheckout) {
+      setPendingCheckout(false);
+      setTimeout(() => {
+        void startCheckoutWithEmail(normalised);
+      }, 50);
+      return;
+    }
     setView("app");
     setStep("landing");
+  };
+
+  const goPro = () => {
+    if (user?.isPro) {
+      setView("app");
+      setStep("landing");
+      return;
+    }
+    if (!user) {
+      setPendingCheckout(true);
+      setAuthMode("signup");
+      return;
+    }
+    void startCheckout();
   };
 
   const startCheck = () => {
@@ -208,33 +257,24 @@ export default function HomePage() {
     }
   };
 
-  const startCheckout = async () => {
-    setCheckoutLoading(true);
-    try {
-      const res = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: user?.email })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Checkout failed");
-      if (data.url) window.location.href = data.url;
-    } catch (err: any) {
-      setAuthError(err.message);
-      setCheckoutLoading(false);
-    }
-  };
-
   if (authMode) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4 bg-[#FAFAF9]">
         <div className="bg-white rounded-2xl border p-6 w-full max-w-sm space-y-4">
-          <h1 className="text-xl font-bold text-center">{authMode === "signup" ? "Create account" : "Log in"}</h1>
+          <h1 className="text-xl font-bold text-center">
+            {pendingCheckout
+              ? (authMode === "signup" ? "Create account to get Pro" : "Log in to get Pro")
+              : (authMode === "signup" ? "Create account" : "Log in")}
+          </h1>
           <form onSubmit={handleAuth} className="space-y-3">
             <input type="email" required placeholder="Email" className="w-full rounded-lg border px-3 py-2.5" value={email} onChange={(e) => setEmail(e.target.value)} />
             <input type="password" required placeholder="Password (min 6)" className="w-full rounded-lg border px-3 py-2.5" value={password} onChange={(e) => setPassword(e.target.value)} />
             {authError && <p className="text-sm text-red-600">{authError}</p>}
-            <button type="submit" className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl">{authMode === "signup" ? "Create account" : "Log in"}</button>
+            <button type="submit" className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl">
+              {pendingCheckout
+                ? (authMode === "signup" ? "Create account & continue to Stripe" : "Log in & continue to Stripe")
+                : (authMode === "signup" ? "Create account" : "Log in")}
+            </button>
           </form>
           <p className="text-xs text-center text-gray-500">
             {authMode === "signup" ? (
@@ -243,7 +283,7 @@ export default function HomePage() {
               <>New? <button type="button" className="text-blue-600" onClick={() => setAuthMode("signup")}>Sign up</button></>
             )}
           </p>
-          <button type="button" className="text-xs text-gray-400 w-full" onClick={() => setAuthMode(null)}>Cancel</button>
+          <button type="button" className="text-xs text-gray-400 w-full" onClick={() => { setAuthMode(null); setPendingCheckout(false); }}>Cancel</button>
         </div>
       </div>
     );
@@ -253,7 +293,7 @@ export default function HomePage() {
     return (
       <div className="min-h-screen flex items-center justify-center px-4 bg-black/40">
         <div className="bg-white rounded-2xl border p-6 w-full max-w-sm space-y-4">
-          <h1 className="text-xl font-bold text-center">Free check used</h1>
+          <h1 className="text-xl font-bold text-center">Upgrade to Pro</h1>
           <p className="text-sm text-gray-600 text-center">Pro is £19/month for unlimited checks.</p>
           {authError && <p className="text-sm text-red-600">{authError}</p>}
           <button className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl" disabled={checkoutLoading} onClick={startCheckout}>
@@ -275,7 +315,9 @@ export default function HomePage() {
               <span className="font-bold hidden sm:inline">Guard<span className="text-blue-600">Construct</span></span>
             </div>
             <div className="flex items-center gap-3">
-              {user ? <ProfileMenu user={user} onLogout={logout} /> : (
+              {user ? (
+                <ProfileMenu user={user} onLogout={logout} />
+              ) : (
                 <button type="button" onClick={() => setAuthMode("login")} className="text-sm text-gray-600">Log in</button>
               )}
               <button type="button" onClick={startCheck} className="bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-lg">Check a document</button>
@@ -294,12 +336,21 @@ export default function HomePage() {
             <div className="rounded-2xl border p-6">
               <p className="text-sm font-semibold text-gray-500 uppercase">Free</p>
               <p className="text-3xl font-bold mt-1">£0</p>
-              <button type="button" onClick={startCheck} className="mt-4 w-full border font-semibold py-2.5 rounded-xl">Start free check</button>
+              <p className="text-sm text-gray-600 mt-1 mb-3">One document check</p>
+              <button type="button" onClick={startCheck} className="w-full border font-semibold py-2.5 rounded-xl">Start free check</button>
             </div>
             <div className="rounded-2xl border-2 border-blue-600 p-6">
               <p className="text-sm font-semibold text-gray-500 uppercase">Pro</p>
               <p className="text-3xl font-bold mt-1">£19<span className="text-base text-gray-500">/month</span></p>
-              <button type="button" onClick={startCheck} className="mt-4 w-full bg-blue-600 text-white font-semibold py-2.5 rounded-xl">Get Pro</button>
+              <p className="text-sm text-gray-600 mt-1 mb-3">Unlimited document checks</p>
+              <button
+                type="button"
+                onClick={goPro}
+                disabled={checkoutLoading}
+                className="w-full bg-blue-600 text-white font-semibold py-2.5 rounded-xl disabled:opacity-60"
+              >
+                {checkoutLoading ? "Opening Stripe…" : user?.isPro ? "You’re on Pro" : "Get Pro — £19/month"}
+              </button>
             </div>
           </div>
         </section>
