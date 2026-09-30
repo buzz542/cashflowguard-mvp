@@ -11,7 +11,7 @@ Scope from the owner's brief. Each item: implement, test, `npm run check` green,
 - [x] 5. Payments and limits: one free check per account (server-side, account + IP limits), Stripe Checkout £19/month, portal, webhooks grant and revoke (incl. invoice.payment_failed). Test mode only.
 - [x] 6. Site copy: Roadmap and Pricing match what's built (team seats "planned"), Privacy and Terms cover storage, deletion and referral disclosure.
 - [x] 7. Security pass.
-- [ ] 8. End-to-end test.
+- [ ] 8. End-to-end test. Runbook written (`docs/E2E.md`); not run: needs Supabase, Stripe test keys, Resend and Anthropic keys.
 
 ## Round 2 (earlier today)
 
