@@ -8,6 +8,7 @@ describe("config", () => {
     expect(c.anthropicModel).toBe("claude-sonnet-5-5");
     expect(c.anthropicThinking).toBe("off");
     expect(c.anthropicEffort).toBe("high");
+    expect(c.teamsEnabled).toBe(false);
   });
   it("reads overrides and rejects out-of-range values", () => {
     expect(readInt({ X: "5" }, "X", 1, 0, 10)).toBe(5);

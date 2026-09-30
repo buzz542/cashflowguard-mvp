@@ -9,7 +9,7 @@ Scope from the owner's brief. Each item: implement, test, `npm run check` green,
 - [x] 3. Project tracking + notice reminders (Pro): projects with dated items (application, payment due, notice deadline, retention release), pre-filled from the check, statuses upcoming/due/overdue/done, emails at 7 days, 2 days, on the day and overdue, one daily idempotent cron, unsubscribe link, "Reminders are a prompt only" notice.
 - [x] 4. "Need help getting paid?": button on overdue items and results, form with consent, saved to DB, emailed to ADMIN_EMAIL, never shared automatically.
 - [x] 5. Payments and limits: one free check per account (server-side, account + IP limits), Stripe Checkout £19/month, portal, webhooks grant and revoke (incl. invoice.payment_failed). Test mode only.
-- [ ] 6. Site copy: Roadmap and Pricing match what's built (team seats "planned"), Privacy and Terms cover storage, deletion and referral disclosure.
+- [x] 6. Site copy: Roadmap and Pricing match what's built (team seats "planned"), Privacy and Terms cover storage, deletion and referral disclosure.
 - [ ] 7. Security pass.
 - [ ] 8. End-to-end test.
 

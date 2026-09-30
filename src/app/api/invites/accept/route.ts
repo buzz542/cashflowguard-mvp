@@ -10,6 +10,7 @@ export const runtime = "nodejs";
 
 /** Accept a team invite `{ token }`. The signed-in email must match the invited one. */
 export async function POST(req: Request) {
+  if (!config.teamsEnabled) return jsonError(404, "Teams aren't available yet.");
   const auth = await requireUser();
   if ("response" in auth) return auth.response;
 

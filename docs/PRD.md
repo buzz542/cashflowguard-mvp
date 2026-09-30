@@ -71,14 +71,15 @@ From the landing page, metadata and system prompt:
 | **"Need help getting paid?" (all signed-in users)** | Button on overdue tracked items and on every result page. Form: amount owed, who owes it, days overdue (pre-filled from the item), pay-less notice served (yes/no/not sure), name, email, phone, notes, and a required consent tick: "I agree you may share this with a solicitor or adjudication partner, who may pay us a referral fee." Saved to `help_requests` (consent wording stored with it) and emailed to `ADMIN_EMAIL` with reply-to set to the user. Nothing is shared with anyone automatically. 5 per user per day | `HelpForm.tsx`, `api/help`, `lib/helpRequest.ts`, migration 0008 |
 | **Deadlines view** | Overdue / due in the next 7 days / upcoming / needs a date / done, plus add project and add date | `DeadlinesView` |
 | **Reminder opt-out** | Toggle in the account menu, or the unsubscribe link in every email | `api/me/preferences`, `api/unsubscribe` |
-| **Team workspaces** | Create a team (up to 3 owned), switch between Personal and teams. Reviews, jobs and deadlines in a team are shared with its members | `api/workspaces*`, `TeamPanel.tsx`, `ProfileMenu.tsx` |
+| **Team workspaces** (off unless `TEAMS_ENABLED=true`) | Create a team (up to 3 owned), switch between Personal and teams. Reviews, jobs and deadlines in a team are shared with its members | `api/workspaces*`, `TeamPanel.tsx`, `ProfileMenu.tsx` |
 | **Invites** | Owner invites by email; single-use link, 7 days, only for that address; hashed token; emailed if Resend is set up, otherwise the link is shown once to copy. Revoke; accept on login | `api/workspaces/[id]/invites*`, `api/invites/accept`, `accept_workspace_invite()` |
 | **Per-seat Pro** | Owner buys N seats (≥ current members, ≤ 25) in Stripe Checkout; seats go owner first, then by join date; members without a seat use their own free check. Seat changes via the Stripe portal | `api/checkout`, `lib/entitlements.ts` |
 | **Members** | List with seat status; owner removes, members leave. Leaving re-routes their deadlines and reminders | `api/workspaces/[id]/members*` |
 | **Deadline assignees** | In a team, each confirmed deadline's reminders can go to a chosen teammate (else whoever started tracking, else the owner) | `api/obligations/[id]`, `pickRecipient()` |
-| Privacy Policy, Terms of Use | Updated for accounts, stored history, Supabase, fair use, free-tier rules | `privacy/`, `terms/` |
+| Privacy Policy, Terms of Use | Updated for accounts, stored history, Supabase, fair use, free-tier rules; 30 Sep 2026: document storage and deletion, free-tier history, project tracking, unsubscribe, help-getting-paid data and the referral-fee disclosure (Terms §5C). `TERMS_VERSION` 2026-09-30.1, so everyone re-accepts | `privacy/`, `terms/` |
 | Report a problem | `mailto:` link to founder | footer |
 | Rate limiting | Free tier in Postgres (durable). Per-user hourly speed bumps in memory | `lib/rateLimit.ts`, `claim_free_review()` |
+| Marketing copy | Features, Pricing (Free vs Pro feature lists) and Roadmap match what's built: cloud history and reminders live, help getting paid live, team seats planned |
 | Security headers / CSP | Set globally; CSP allows the Supabase origin | `next.config.mjs` |
 
 ### 4.2 Roadmap only (advertised, no code)
@@ -86,7 +87,7 @@ From the landing page, metadata and system prompt:
 | Item | What exists today | What's missing |
 |---|---|---|
 | ~~Cloud history across devices~~ | **Live since Phase 1** | n/a |
-| ~~Team seats for small firms~~ | **Live since Phase 3** | n/a |
+| Team seats for small firms | **Built (Phase 3) but switched off**: `TEAMS_ENABLED=false` hides the UI and blocks creating teams, invites and accepting invites. Site shows it as "Planned" | Owner decision to launch it; set `TEAMS_ENABLED=true` |
 | ~~Notice deadline reminders~~ | **Live since Phase 2** | n/a |
 
 ### 4.3 Implied or claimed but not really there

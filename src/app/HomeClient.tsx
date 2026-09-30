@@ -40,7 +40,15 @@ async function readJson<T>(res: Response): Promise<T & ApiError> {
   return (await res.json().catch(() => ({}))) as T & ApiError;
 }
 
-export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit: number; remindersProOnly: boolean }) {
+export default function HomeClient({
+  freeLimit,
+  remindersProOnly,
+  teamsEnabled = false
+}: {
+  freeLimit: number;
+  remindersProOnly: boolean;
+  teamsEnabled?: boolean;
+}) {
   const [view, setView] = useState<"marketing" | "app">("marketing");
   const [me, setMe] = useState<Me | null>(null);
   const [reviews, setReviews] = useState<ReviewSummary[]>([]);
@@ -623,7 +631,7 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
               onViewDeadlines={() => { setView("app"); setStep("deadlines"); }}
               onToggleReminders={me.canTrackDeadlines ? toggleReminderEmails : undefined}
               onSwitchWorkspace={switchWorkspace}
-              onOpenTeam={() => { setView("app"); setStep("team"); }}
+              onOpenTeam={teamsEnabled ? () => { setView("app"); setStep("team"); } : undefined}
               onDeleteAccount={deleteAccount}
             />
           ) : (
@@ -762,11 +770,13 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
                 "Built around English construction payment traps (JCT / NEC style patterns)",
                 "Retention, pay-when-paid, notice deadlines, LADs and set-off flagged in plain English",
                 "Suggested wording you can copy into an email or message",
-                "Past contract reviews saved to your account, on any device",
-                `Email reminders before notice and payment deadlines${remindersProOnly ? " (Pro)" : ""}`,
+                "Results appear as they're written, usually within seconds",
+                "Every check saved to your account, on any device (Pro; free keeps your latest)",
+                `Project tracking: application, payment, notice and retention dates${remindersProOnly ? " (Pro)" : ""}`,
+                `Reminder emails 7 days before, 2 days before, on the day and when overdue${remindersProOnly ? " (Pro)" : ""}`,
                 "Photo, PDF and Word upload",
-                "Pro plan for unlimited checks",
-                "Team workspaces: shared reviews and deadlines, Pro per seat"
+                "Owed money already? Ask for help getting paid from any result",
+                ...(teamsEnabled ? ["Team workspaces: shared reviews and deadlines, Pro per seat"] : [])
               ].map((f) => (
                 <div key={f} className="flex gap-3 bg-white rounded-xl border p-4 text-sm text-gray-700">
                   <span className="text-blue-600 font-bold">✓</span>
@@ -783,15 +793,26 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
             <div className="rounded-2xl border p-6">
               <p className="text-sm font-semibold text-gray-500 uppercase">Free</p>
               <p className="text-3xl font-bold mt-1">£0</p>
-              <p className="text-sm text-gray-600 mt-1 mb-4">
+              <p className="text-sm text-gray-600 mt-1">
                 {freeLimit === 1 ? "One document check" : `${freeLimit} document checks`}
               </p>
+              <ul className="text-sm text-gray-600 mt-3 mb-4 space-y-1">
+                <li>✓ Full action plan with suggested wording</li>
+                <li>✓ Your latest result saved</li>
+                <li>✓ &quot;Need help getting paid?&quot; requests</li>
+              </ul>
               <button type="button" onClick={startCheck} className="w-full border font-semibold py-2.5 rounded-xl">Start free check</button>
             </div>
             <div className="rounded-2xl border-2 border-blue-600 p-6">
               <p className="text-sm font-semibold text-gray-500 uppercase">Pro</p>
               <p className="text-3xl font-bold mt-1">£19<span className="text-base text-gray-500">/month</span></p>
-              <p className="text-sm text-gray-600 mt-1 mb-4">Unlimited checks · Cancel any time</p>
+              <p className="text-sm text-gray-600 mt-1">Cancel any time</p>
+              <ul className="text-sm text-gray-700 mt-3 mb-4 space-y-1">
+                <li>✓ Unlimited checks (fair use: 20 an hour)</li>
+                <li>✓ Every check saved in your history</li>
+                <li>✓ Project tracking with deadlines found in your contracts</li>
+                <li>✓ Reminder emails: 7 days, 2 days, on the day, overdue</li>
+              </ul>
               <button type="button" onClick={goPro} disabled={checkoutLoading}
                 className="w-full bg-blue-600 text-white font-semibold py-2.5 rounded-xl disabled:opacity-60">
                 {checkoutLoading ? "Opening Stripe…" : me?.isPro ? "You’re on Pro" : "Get Pro — £19/month"}
@@ -807,9 +828,14 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
             <ul className="text-left space-y-3 text-sm text-gray-700 max-w-md mx-auto">
               <li className="bg-white border rounded-xl px-4 py-3">✓ Live: contract photo / PDF / Word checks</li>
               <li className="bg-white border rounded-xl px-4 py-3">✓ Live: action plan + suggested wording</li>
-              <li className="bg-white border rounded-xl px-4 py-3">✓ Live: history across devices</li>
-              <li className="bg-white border rounded-xl px-4 py-3">✓ Live: notice deadline reminders</li>
-              <li className="bg-white border rounded-xl px-4 py-3">✓ Live: team seats for small firms</li>
+              <li className="bg-white border rounded-xl px-4 py-3">✓ Live: cloud history across devices (Pro)</li>
+              <li className="bg-white border rounded-xl px-4 py-3">✓ Live: project tracking and notice deadline reminders (Pro)</li>
+              <li className="bg-white border rounded-xl px-4 py-3">✓ Live: help getting paid when you&apos;re already owed</li>
+              {teamsEnabled ? (
+                <li className="bg-white border rounded-xl px-4 py-3">✓ Live: team seats for small firms</li>
+              ) : (
+                <li className="bg-white border rounded-xl px-4 py-3 text-gray-500">○ Planned: team seats for small firms</li>
+              )}
             </ul>
           </div>
         </section>
@@ -863,9 +889,11 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
               <button type="button" onClick={() => setStep("deadlines")} className="w-full border font-semibold py-3 rounded-xl text-sm">
                 Deadlines I&apos;m tracking
               </button>
-              <button type="button" onClick={() => setStep("team")} className="w-full border font-semibold py-3 rounded-xl text-sm">
-                {me?.workspace && !me.workspace.personal ? "Team settings" : "Teams"}
-              </button>
+              {teamsEnabled && (
+                <button type="button" onClick={() => setStep("team")} className="w-full border font-semibold py-3 rounded-xl text-sm">
+                  {me?.workspace && !me.workspace.personal ? "Team settings" : "Teams"}
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -875,7 +903,7 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
             canTrack={!!me?.canTrackDeadlines} onUpgrade={() => setShowSubscribe(true)} onHelp={(o) => setHelp({ obligation: o })} />
         )}
 
-        {step === "team" && me?.workspace && (
+        {step === "team" && teamsEnabled && me?.workspace && (
           <TeamView
             me={me}
             onBack={() => setStep("landing")}

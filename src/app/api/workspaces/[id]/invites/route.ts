@@ -16,6 +16,7 @@ export const runtime = "nodejs";
  * once, so the owner can share it themselves if email isn't set up or doesn't arrive.
  */
 export async function POST(req: Request, { params }: { params: { id: string } }) {
+  if (!config.teamsEnabled) return jsonError(404, "Teams aren't available yet.");
   const auth = await requireUser();
   if ("response" in auth) return auth.response;
   if (!UUID_RE.test(params.id)) return jsonError(404, "Not found.");

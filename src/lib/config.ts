@@ -53,6 +53,8 @@ export function loadConfig(env: Env = process.env) {
     /** Team workspaces one person can own. */
     maxOwnedTeams: readInt(env, "MAX_OWNED_TEAMS", 3, 1, 50),
     inviteTtlDays: readInt(env, "INVITE_TTL_DAYS", 7, 1, 90),
+    /** Team seats are built but shown as "planned" until this is turned on. */
+    teamsEnabled: readBool(env, "TEAMS_ENABLED", false),
     /** Photo pages a non-Pro user can have read per UK day (each is an AI call). */
     freeOcrPagesPerDay: readInt(env, "FREE_OCR_PAGES_PER_DAY", 12, 0, 500),
     /** Service-wide daily cap on photo pages for non-Pro users. */
@@ -63,7 +65,7 @@ export function loadConfig(env: Env = process.env) {
 export const config = loadConfig();
 
 /** Bump when the Terms or Privacy Policy change materially; users must re-accept. */
-export const TERMS_VERSION = "2026-09-29.3";
+export const TERMS_VERSION = "2026-09-30.1";
 
 /** Bump when the review system prompt changes, so stored reviews record which one produced them. */
 export const PROMPT_VERSION = "2026-09-30.1";

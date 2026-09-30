@@ -20,7 +20,7 @@ export default function PrivacyPage() {
       </header>
       <main className="max-w-3xl mx-auto px-4 py-10 prose prose-sm prose-gray">
         <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
-        <p className="text-sm text-gray-500 mb-8">Last updated: 29 September 2026 · England &amp; Wales</p>
+        <p className="text-sm text-gray-500 mb-8">Last updated: 30 September 2026 · England &amp; Wales</p>
 
         <h2 className="text-lg font-bold mt-8 mb-2">Who we are</h2>
         <p>
@@ -36,7 +36,7 @@ export default function PrivacyPage() {
         <ul className="list-disc pl-5 space-y-1">
           <li>Account details: your email address, and a password if you choose one (stored hashed by our login provider, never by us in plain text).</li>
           <li>Job context you enter (trade, package size band, duration, role).</li>
-          <li>Contract documents, photos or text you upload for review.</li>
+          <li>Contract documents, photos or text you upload for review (read in memory, not stored: see Retention).</li>
           <li>
             Your review history: the AI result for each check and the job context. We don&apos;t keep the contract
             itself. Results can quote contract wording, which may include names and addresses of the parties.
@@ -51,25 +51,40 @@ export default function PrivacyPage() {
             reviews and deadlines you create in that team.
           </li>
           <li>
-            If you use deadline reminders: the deadlines picked out of your contract (including short quotes of the
-            relevant clauses), job names, dates you enter, and a record of reminder emails sent.
+            If you use project tracking and reminders: project names, the deadlines picked out of your contract
+            (including short quotes of the relevant clauses), dates and notes you add yourself, whether you&apos;ve marked
+            them done, and a record of reminder emails sent.
+          </li>
+          <li>
+            If you ask for help getting paid: the amount owed, who owes it, how many days overdue, whether a pay less
+            notice was served, your name, email, phone number (optional), any notes, and a record that you ticked the
+            consent box and its exact wording.
           </li>
           <li>Payment and subscription data processed by Stripe if you subscribe.</li>
-          <li>Basic technical data (IP address, browser type) in server logs for security and rate limiting.</li>
+          <li>Basic technical data (IP address, browser type) in server logs for security and rate limiting, and how long each check took.</li>
         </ul>
 
         <h2 className="text-lg font-bold mt-8 mb-2">How we use it</h2>
         <ul className="list-disc pl-5 space-y-1">
           <li>To run an automated contract risk summary and show results to you.</li>
           <li>To keep your review history so you can see it on any device.</li>
-          <li>To send deadline reminder emails you have asked for. You can turn these off in the account menu.</li>
+          <li>
+            To send deadline reminder emails you have asked for. You can turn these off in the account menu or with the
+            unsubscribe link in any reminder email.
+          </li>
+          <li>
+            To follow up a &quot;Need help getting paid?&quot; request. <strong>Only if you tick the consent box</strong>, we may
+            pass your request to a solicitor or adjudication partner, who may pay us a referral fee. We do this by hand;
+            nothing is shared automatically, and you can withdraw consent at any time by emailing us before we pass it on.
+          </li>
           <li>To enforce free-tier limits and Pro subscriptions.</li>
           <li>To process payments and prevent abuse (rate limiting, fraud checks).</li>
           <li>To respond to support requests you send us.</li>
         </ul>
         <p className="mt-2">
           Legal bases under UK GDPR: contract performance (providing the service you request), legitimate interests
-          (securing the service, preventing abuse), and legal obligation where applicable.
+          (securing the service, preventing abuse), consent (sharing a help-getting-paid request with a partner), and
+          legal obligation where applicable.
         </p>
 
         <h2 className="text-lg font-bold mt-8 mb-2">AI processing</h2>
@@ -94,7 +109,12 @@ export default function PrivacyPage() {
             <strong>Vercel</strong> — website hosting and serverless infrastructure.
           </li>
           <li>
-            <strong>Resend</strong> — sending deadline reminder and team invite emails.
+            <strong>Resend</strong> — sending reminder emails, and emailing us your help-getting-paid requests.
+          </li>
+          <li>
+            <strong>Solicitor or adjudication partners</strong> — only a help-getting-paid request you consented to share,
+            passed on by us by hand. They may pay us a referral fee. They are independent and handle your data under
+            their own privacy notice.
           </li>
         </ul>
         <p className="mt-2">
@@ -111,10 +131,14 @@ export default function PrivacyPage() {
 
         <h2 className="text-lg font-bold mt-8 mb-2">Retention</h2>
         <p>
-          Uploaded files and the full contract text are processed in memory for the request and are not stored by us.
-          Your review history (as described above) is kept until you delete it, which you can do for each review in the
-          app, or until you delete your account (account menu → Delete my account) or ask us to. Deleting your
-          account removes your profile, personal reviews, tracked deadlines and any teams you own. We keep the
+          Uploaded files and the full contract text are processed in memory for the request and are not stored by us,
+          so there is no file to delete later. Your review history (as described above) is kept until you delete it,
+          which you can do for each review in the app, or until you delete your account (account menu → Delete my
+          account) or ask us to. Free accounts see only their latest check; earlier ones are kept so they come back if
+          you subscribe, and are removed when you delete your account or ask us to. Deleting a check also deletes the
+          deadlines and reminders taken from it. Help-getting-paid requests are kept until you delete your account or
+          ask us to delete them. Deleting your
+          account removes your profile, personal reviews, projects, tracked dates, help-getting-paid requests and any teams you own. We keep the
           normalised email and count used for the free-tier limit, so the free check can&apos;t be reset by
           re-registering, and Stripe keeps billing records as the law requires. Hashed IP
           addresses used for free-tier limits are deleted after 2 days. Stripe retains payment records per their

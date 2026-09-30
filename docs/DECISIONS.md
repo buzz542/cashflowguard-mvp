@@ -130,3 +130,12 @@ Before/after timings (one-page sample, photo / PDF / Word):
 | Test mode | Code refuses `sk_live_`/`rk_live_` keys except on the Vercel production deployment (or `NODE_ENV=production` + `STRIPE_ALLOW_LIVE=true` off Vercel) | Brief: test mode only while testing; stops a preview charging a real card |
 | Upgrade screen copy | Lists what Pro includes; only says "You've used your free check" when that's true | It opened from history and tracking too |
 | Live Stripe account | Not touched in this round. Earlier today (before this brief) a live webhook endpoint `we_1ULOp7K1Ki2AAD9wGiESOPiV` was created without `invoice.payment_failed`; add that event in the dashboard | Brief: never touch live keys |
+
+### 6. Site copy
+
+| Decision | Choice | Why |
+|---|---|---|
+| Team seats "planned" | Code kept, switched off with `TEAMS_ENABLED` (default false): UI hidden, team creation/invites/accept return 404 | They were built earlier; the brief says show them as planned. A flag is reversible, deleting code isn't |
+| Pricing | Free: one check, latest result saved, help requests. Pro: unlimited (fair use 20/hour), full history, project tracking, reminder schedule | Lists only what's built |
+| Terms version | Bumped to `2026-09-30.1`: everyone re-accepts | The referral-fee disclosure is a material change |
+| Referral wording | Terms §5C and Privacy say a partner "may pay us a referral fee", only with the consent tick, passed on by hand. No promise about partners' own fees | Accurate without committing to things we don't control |

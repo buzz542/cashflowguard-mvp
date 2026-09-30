@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 
 /** Create a team workspace `{ name }` owned by the caller, and switch to it. */
 export async function POST(req: Request) {
+  if (!config.teamsEnabled) return jsonError(404, "Teams aren't available yet.");
   const auth = await requireUser();
   if ("response" in auth) return auth.response;
 
