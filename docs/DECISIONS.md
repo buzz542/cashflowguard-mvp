@@ -107,3 +107,15 @@ Before/after timings (one-page sample, photo / PDF / Word):
 | Unsubscribe | Link in every reminder email, signed with HMAC (`UNSUBSCRIBE_SECRET`, else `CRON_SECRET`). GET shows a confirm button; POST unsubscribes (also RFC 8058 one-click via `List-Unsubscribe-Post`) | Mail scanners open GET links; a one-step GET would unsubscribe people by accident |
 | Email provider | Resend (already in the code) | Brief: use the existing provider |
 | Notice | "Reminders are a prompt only. Check your contract for exact dates." on the tracking view, the contract's deadlines panel and every email | Owner's wording |
+
+### 4. "Need help getting paid?"
+
+| Decision | Choice | Why |
+|---|---|---|
+| Who sees it | Any signed-in user (free or Pro): on overdue tracked items (Pro) and on every check result | Recovery is where people have already shown they'll pay; no reason to gate the lead |
+| Storage | New `help_requests` table (migration 0008, additive). Users can read their own; only the server writes. Deleted with the account | Brief: save to the database |
+| Consent | Checkbox with the owner's exact wording, must be ticked (checked server-side and by a DB constraint); the wording is stored with each request | Proof of what they agreed to |
+| Owner notification | Email to `ADMIN_EMAIL` via Resend, reply-to set to the user's contact email. If email isn't configured, the request is still saved and an error is logged | Never lose a lead |
+| Amount | Stored in pence (`bigint`), £0.01 to £1bn | No float rounding |
+| Spam limit | 5 requests per user per day (in-memory) | Signed-in only already limits abuse |
+| Third parties | None. No partner integration, no automatic forwarding (out of scope, see IDEAS.md) | Brief |

@@ -8,6 +8,7 @@ import { ProfileMenu } from "./ProfileMenu";
 import { AuthModal, TermsGate } from "./AuthModal";
 import { DeadlinesPanel, DeadlinesView } from "./DeadlinesPanel";
 import { TeamView } from "./TeamPanel";
+import { HelpForm, type HelpContext } from "./HelpForm";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
 import { prepareUpload } from "@/lib/uploadPrep";
 import { readNdjson, mapLimit } from "@/lib/ndjson";
@@ -62,6 +63,7 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
   const [streamed, setStreamed] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [showSubscribe, setShowSubscribe] = useState(false);
+  const [help, setHelp] = useState<HelpContext | null>(null);
   const [subscribeError, setSubscribeError] = useState("");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [pendingCheckout, setPendingCheckout] = useState(false);
@@ -865,7 +867,7 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
 
         {step === "deadlines" && (
           <DeadlinesView onBack={() => setStep("landing")} onOpenReview={openReview} members={teamMembers}
-            canTrack={!!me?.canTrackDeadlines} onUpgrade={() => setShowSubscribe(true)} />
+            canTrack={!!me?.canTrackDeadlines} onUpgrade={() => setShowSubscribe(true)} onHelp={(o) => setHelp({ obligation: o })} />
         )}
 
         {step === "team" && me?.workspace && (
@@ -1029,13 +1031,26 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
               onObligations={setObligations}
               onJob={setJob}
               members={teamMembers}
+              onHelp={(o) => setHelp({ obligation: o, reviewId })}
             />
+            <div className="bg-white rounded-2xl border p-5 space-y-2">
+              <h2 className="font-bold">Already owed money on this job?</h2>
+              <p className="text-sm text-gray-600">
+                If a payment is late, we can put you in touch with a solicitor or adjudication service.
+              </p>
+              <button type="button" onClick={() => setHelp({ reviewId })} className="bg-red-600 text-white text-sm font-semibold px-4 py-2 rounded-lg">
+                Need help getting paid?
+              </button>
+            </div>
             <button type="button" onClick={startCheck} className="w-full bg-blue-600 text-white font-semibold py-3.5 rounded-xl">
               Start another check →
             </button>
           </div>
         )}
       </main>
+      {help && (
+        <HelpForm context={help} defaultName={me?.user?.name ?? ""} defaultEmail={me?.user?.email ?? ""} onClose={() => setHelp(null)} />
+      )}
       <FooterLinks />
     </div>
   );

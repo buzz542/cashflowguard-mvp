@@ -188,6 +188,10 @@ Flow: `/api/review` runs `extractObligations()` **in parallel** with the review 
 - Emails escape all contract-derived text (`reminderEmail.ts`). Keep it that way.
 - Bump `EXTRACTION_VERSION` when the extraction prompt/schema changes (stored per obligation).
 
+## "Need help getting paid?"
+
+`POST /api/help` validates (`lib/helpRequest.ts`: consent must be exactly `true`), links the obligation/review only if the caller is a member of its workspace, saves to `help_requests` (RLS: users can read their own; writes only via service role), then emails `ADMIN_EMAIL` via Resend with every user value escaped. Email failure never loses the request (`emailed_at` stays null). **Never add automatic forwarding to a partner**: the consent covers the owner sharing it, by hand.
+
 ## Teams
 
 - Every user has a **personal** workspace; they can own up to `MAX_OWNED_TEAMS` team workspaces and belong to others. The active one is the `gc_ws` httpOnly cookie; `loadWorkspaceContext()` honours it only if the user is a member, else falls back to personal. All workspace-scoped routes (reviews, checkout, portal, deadlines) use the active workspace.
