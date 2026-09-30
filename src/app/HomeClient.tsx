@@ -688,8 +688,13 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
         <div className="bg-white rounded-2xl border p-6 w-full max-w-sm space-y-4">
           <h1 className="text-xl font-bold text-center">Upgrade to Pro</h1>
           <p className="text-sm text-gray-600 text-center">
-            You&apos;ve used your free check. Pro is £19/month for unlimited checks. Cancel any time in Manage billing.
+            {me?.free && me.free.remaining === 0 ? "You've used your free check. " : ""}Pro is £19/month. Cancel any time in Manage billing.
           </p>
+          <ul className="text-sm text-gray-700 space-y-1">
+            <li>✓ Unlimited contract checks (fair use)</li>
+            <li>✓ Every check saved in your history</li>
+            <li>✓ Project tracking with deadline reminder emails</li>
+          </ul>
           {subscribeError && <p className="text-sm text-red-600">{subscribeError}</p>}
           <button className="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl" disabled={checkoutLoading} onClick={startCheckout}>
             {checkoutLoading ? "Opening Stripe…" : "Subscribe — £19/month"}

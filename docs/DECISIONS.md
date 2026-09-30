@@ -119,3 +119,14 @@ Before/after timings (one-page sample, photo / PDF / Word):
 | Amount | Stored in pence (`bigint`), £0.01 to £1bn | No float rounding |
 | Spam limit | 5 requests per user per day (in-memory) | Signed-in only already limits abuse |
 | Third parties | None. No partner integration, no automatic forwarding (out of scope, see IDEAS.md) | Brief |
+
+### 5. Payments and limits
+
+| Decision | Choice | Why |
+|---|---|---|
+| Free check + limits | Already built (Phase 1, 4): one per canonical email for life, 3 per IP per day, 200 per day service-wide, all in Postgres; 20 checks/hour per user; photo pages capped separately. Kept | Meets the brief |
+| `invoice.payment_failed` | Handled: re-fetch the subscription (status is then `past_due`), which isn't Pro | Same code path as the other events; nothing trusted from the event body |
+| Grace period on a failed payment | None: Pro stops as soon as Stripe marks the subscription `past_due` and comes back automatically when a retry succeeds (`customer.subscription.updated`) | Simplest; matches the existing `active`/`trialing`-only rule |
+| Test mode | Code refuses `sk_live_`/`rk_live_` keys except on the Vercel production deployment (or `NODE_ENV=production` + `STRIPE_ALLOW_LIVE=true` off Vercel) | Brief: test mode only while testing; stops a preview charging a real card |
+| Upgrade screen copy | Lists what Pro includes; only says "You've used your free check" when that's true | It opened from history and tracking too |
+| Live Stripe account | Not touched in this round. Earlier today (before this brief) a live webhook endpoint `we_1ULOp7K1Ki2AAD9wGiESOPiV` was created without `invoice.payment_failed`; add that event in the dashboard | Brief: never touch live keys |

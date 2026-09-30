@@ -47,6 +47,32 @@ export function shouldReplaceSubscription(
   return true;
 }
 
+/**
+ * Which subscription an event is about, if any. Invoices carry it as `subscription`
+ * (API 2025-02-24) or under `parent.subscription_details` (newer API versions).
+ */
+export function subscriptionIdFromEvent(event: { type: string; data: { object: unknown } }): string | null {
+  const obj = event.data.object as Record<string, unknown>;
+  const idOf = (v: unknown): string | null =>
+    typeof v === "string" ? v : v && typeof v === "object" && typeof (v as { id?: unknown }).id === "string" ? (v as { id: string }).id : null;
+  if (event.type === "checkout.session.completed") return idOf(obj.subscription);
+  if (SUBSCRIPTION_EVENTS.has(event.type)) return idOf(obj.id);
+  if (event.type === "invoice.payment_failed") {
+    const parent = obj.parent as { subscription_details?: { subscription?: unknown } } | null | undefined;
+    return idOf(obj.subscription) ?? idOf(parent?.subscription_details?.subscription);
+  }
+  return null;
+}
+
+/** Events that change who has Pro. */
+export const SUBSCRIPTION_EVENTS = new Set([
+  "customer.subscription.created",
+  "customer.subscription.updated",
+  "customer.subscription.deleted",
+  "customer.subscription.paused",
+  "customer.subscription.resumed"
+]);
+
 /** Pull a subscription from Stripe and mirror it into Postgres. Idempotent. */
 export async function syncSubscription(
   stripe: Stripe,

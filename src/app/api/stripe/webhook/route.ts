@@ -2,22 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { syncSubscription } from "@/lib/stripeSync";
+import { syncSubscription, subscriptionIdFromEvent } from "@/lib/stripeSync";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const SUBSCRIPTION_EVENTS = new Set([
-  "customer.subscription.created",
-  "customer.subscription.updated",
-  "customer.subscription.deleted",
-  "customer.subscription.paused",
-  "customer.subscription.resumed"
-]);
-
 /**
  * Stripe → Postgres subscription mirror. Signature-verified. We re-fetch the
  * subscription instead of trusting the event body, so event ordering doesn't matter.
+ * Grants Pro on checkout.session.completed; revokes it on customer.subscription.updated /
+ * deleted and invoice.payment_failed (the re-fetched status is then past_due, unpaid or
+ * canceled, none of which is Pro).
  * A non-2xx makes Stripe retry, which is what we want on transient failures.
  */
 export async function POST(req: NextRequest) {
@@ -36,14 +31,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    let subscriptionId: string | null = null;
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object as Stripe.Checkout.Session;
-      subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id ?? null;
-    } else if (SUBSCRIPTION_EVENTS.has(event.type)) {
-      subscriptionId = (event.data.object as Stripe.Subscription).id;
-    }
-
+    const subscriptionId = subscriptionIdFromEvent(event);
     if (subscriptionId) await syncSubscription(stripe, getSupabaseAdmin(), subscriptionId);
     return NextResponse.json({ received: true });
   } catch (e) {

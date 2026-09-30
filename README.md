@@ -45,7 +45,7 @@ npm run build
      **Confirm signup** and **Magic link** email templates' link to
      `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email`
 2. **Stripe**: create the Pro price (`STRIPE_PRICE_ID`). Add a webhook endpoint at
-   `https://<domain>/api/stripe/webhook` for `checkout.session.completed` and `customer.subscription.*`, and put its
+   `https://<domain>/api/stripe/webhook` for `checkout.session.completed`, `customer.subscription.*` and `invoice.payment_failed`, and put its
    signing secret in `STRIPE_WEBHOOK_SECRET`. Turn on the Customer Portal (Settings → Billing → Customer portal)
    and allow customers to **update subscription quantities** so team owners can change seats. Optionally create a
    separate per-seat team price (`STRIPE_TEAM_PRICE_ID`); otherwise teams pay the Pro price per seat.

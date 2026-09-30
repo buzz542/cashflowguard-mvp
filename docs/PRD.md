@@ -60,7 +60,7 @@ From the landing page, metadata and system prompt:
 | Profile menu | Name, email, Free/Pro badge, free checks left, last 5 reviews, Manage billing (workspace owner with a Stripe customer), Log out | `ProfileMenu.tsx` |
 | Free tier | Per person (canonical email: aliases share one), plus per-IP daily cap and a service-wide daily cap. Atomic in Postgres. Refunded if the AI call fails | `api/review`, `claim_free_review()` |
 | Pro subscription | £19/month via Stripe Checkout, promo codes allowed, one Stripe customer per workspace | `api/checkout` |
-| Subscription sync | Stripe webhook mirrors subscription status/seats/period into Postgres; return-from-checkout also syncs | `api/stripe/webhook`, `api/checkout/verify`, `lib/stripeSync.ts` |
+| Subscription sync | Stripe webhook mirrors subscription status/seats/period into Postgres; grants on `checkout.session.completed`, revokes on `customer.subscription.updated`/`deleted` and `invoice.payment_failed`; return-from-checkout also syncs. Live Stripe keys only work on the production deployment | `api/stripe/webhook`, `api/checkout/verify`, `lib/stripeSync.ts` |
 | Manage billing / cancel | Stripe Customer Portal for the signed-in owner's workspace | `api/portal` |
 | Complimentary Pro | `workspaces.comp_pro` flag, set by hand in SQL (founder, testers) | README |
 | **Deadline extraction** | Second Claude call (structured output) alongside the review; up to 25 deadlines with kind, clause, quote, and trigger (fixed date / monthly / N days before or after an event). Anything without a clear period is dropped, never guessed. Pro-only by default | `lib/extractObligations.ts`, `lib/obligations.ts` |

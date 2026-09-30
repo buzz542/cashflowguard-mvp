@@ -46,7 +46,7 @@ See `.env.example` for the full list with comments. Key ones:
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser + server Supabase clients, middleware, CSP. Baked in at build |
 | `SUPABASE_SERVICE_ROLE_KEY` | `getSupabaseAdmin()` only. Bypasses RLS |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Review + photo OCR |
-| `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET` | Billing |
+| `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET` | Billing. Live keys (`sk_live_`) are refused except on the Vercel production deployment (`lib/stripe.ts`); use test keys everywhere else |
 | `IP_HASH_SALT` | Hashing IPs for the free-tier ledger |
 | `RESEND_API_KEY`, `EMAIL_FROM` | Reminder emails (`lib/email.ts`) |
 | `CRON_SECRET` | Bearer token Vercel Cron sends to `/api/cron/reminders`; also signs unsubscribe links unless `UNSUBSCRIBE_SECRET` is set |
@@ -162,7 +162,7 @@ Reads that the user is entitled to go through `createSupabaseServerClient()` (RL
 ## Payments
 
 - **Checkout** (`/api/checkout`): owner of the active workspace only. Creates the Stripe customer once per workspace (stored in `subscriptions`), then a subscription Checkout with `client_reference_id` and `subscription_data.metadata.workspace_id`.
-- **Webhook** (`/api/stripe/webhook`): verifies signature, then re-fetches the subscription and upserts it (`syncSubscription`). Event order doesn't matter. `shouldReplaceSubscription` stops a cancelled duplicate from overwriting a live subscription.
+- **Webhook** (`/api/stripe/webhook`): verifies signature, then re-fetches the subscription and upserts it (`syncSubscription`). Events: `checkout.session.completed` (grant), `customer.subscription.created/updated/deleted/paused/resumed`, `invoice.payment_failed` (revoke: re-fetched status is `past_due`/`unpaid`/`canceled`, none of which is Pro); `subscriptionIdFromEvent()` maps each to its subscription. Event order doesn't matter. `shouldReplaceSubscription` stops a cancelled duplicate from overwriting a live subscription.
 - **Verify** (`/api/checkout/verify`): runs the same sync on return from Checkout, only for a workspace the caller belongs to, so Pro shows immediately.
 - **Portal** (`/api/portal`): customer id from our DB for the signed-in owner's workspace. Never from the request body.
 - **Pro** = `comp_pro` OR (subscription `active`/`trialing` AND user's seat rank < `seat_count`). `past_due` is not Pro.
