@@ -167,7 +167,7 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 19. When the contract doesn't say calendar or working days. **Default shipped:** use whichever date is earlier, and say so in the UI and email. Alternative would be to follow the Construction Act's counting rules, which is closer to a legal interpretation.
 
 **Brand, domain and claims**
-20. Canonical domain. **Default shipped:** `guardconstruct.com` (attached to the Vercel project). Production redirects use it automatically via `VERCEL_PROJECT_PRODUCTION_URL` unless `NEXT_PUBLIC_APP_URL` is set.
+20. Canonical domain. **Resolved:** `https://www.guardconstruct.com` (the apex 308-redirects to www). Set as `NEXT_PUBLIC_APP_URL` in Vercel production; Supabase Site URL and Stripe return/webhook URLs use www too.
 21. "Trusted by early UK contractors". **Default shipped:** relabelled "Built for UK trades" (no unverified endorsement claim under ASA/CAP rules). Put a real claim back once you have customers who agree to it.
 22. Model. **Default shipped:** unchanged `claude-sonnet-4-5`, now `ANTHROPIC_MODEL`. Newer models exist; switching changes cost and output and should be tested on real contracts first.
 
