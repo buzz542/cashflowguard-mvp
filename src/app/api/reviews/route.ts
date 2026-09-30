@@ -1,24 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser, loadWorkspaceContext, jsonError, ACTIVE_WORKSPACE_COOKIE } from "@/lib/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { historyLimit } from "@/lib/historyAccess";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** Review history for the active workspace, newest first. Read through RLS as the user. */
+/** Review history for the active workspace, newest first. Read through RLS as the user.
+ *  Not Pro: only the caller's own latest check (see lib/historyAccess.ts). */
 export async function GET(req: NextRequest) {
   const auth = await requireUser();
   if ("response" in auth) return auth.response;
   try {
     const ctx = await loadWorkspaceContext(auth.user, auth.email, req.cookies.get(ACTIVE_WORKSPACE_COOKIE)?.value);
-    const { data, error } = await createSupabaseServerClient()
+    let query = createSupabaseServerClient()
       .from("reviews")
       .select("id, created_at, trade, role, project_size, duration, author_id")
-      .eq("workspace_id", ctx.workspace.id)
-      .order("created_at", { ascending: false })
-      .limit(100);
+      .eq("workspace_id", ctx.workspace.id);
+    if (!ctx.isPro) query = query.eq("author_id", auth.user.id);
+    const { data, error } = await query.order("created_at", { ascending: false }).limit(historyLimit(ctx.isPro));
     if (error) throw new Error(error.message);
-    return NextResponse.json({ reviews: data ?? [] });
+    return NextResponse.json({ reviews: data ?? [], limited: !ctx.isPro });
   } catch (e) {
     console.error("list reviews:", e instanceof Error ? e.message : e);
     return jsonError(500, "Could not load your reviews.");

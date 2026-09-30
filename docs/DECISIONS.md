@@ -83,3 +83,11 @@ Before/after timings (one-page sample, photo / PDF / Word):
 | Photo | not measured (no API key) | not measured (no API key) |
 | PDF | not measured (no API key) | not measured (no API key) |
 | Word | not measured (no API key) | not measured (no API key) |
+
+### 2. Cloud history
+
+| Decision | Choice | Why |
+|---|---|---|
+| "Free users keep their latest result only" | Free users can list and open only their own latest check. Older checks are **hidden, not deleted** | Deleting would wipe a lapsed Pro subscriber's paid history the moment they run a free check, and the brief says stop before deleting user data. Account deletion still removes everything |
+| Where it's enforced | API (`/api/reviews`, `/api/reviews/[id]` → 402 `upgrade_required`), checked against the review's own workspace | RLS still limits rows to the user's workspace. A free user reading their own hidden rows straight from Supabase with their own token is possible and accepted: it's their data |
+| "Delete removes any stored file" | Nothing to remove: uploaded files are read in memory and discarded; only the result is stored. Delete cascades to that check's deadlines and reminders | As built since Phase 1 |

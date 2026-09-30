@@ -76,7 +76,7 @@ src/
       me/delete/route.ts      POST delete own account (confirm: "DELETE")
       review/route.ts         POST run a check (auth, terms, free-tier claim, Claude, save)
       extract/route.ts        POST one file → text (auth required)
-      reviews/route.ts        GET history list (RLS read)
+      reviews/route.ts        GET history list (RLS read; non-Pro: own latest only)
       reviews/[id]/route.ts   GET one (RLS read) / DELETE (author or workspace owner)
       reviews/import/route.ts POST one-time import of pre-accounts localStorage history
       checkout/route.ts       POST Stripe Checkout for the active workspace (owner only)

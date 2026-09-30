@@ -422,6 +422,7 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
       job: JobRow | null;
     }>(res);
     if (!res.ok || !data.review) {
+      if (data.code === "upgrade_required") return setShowSubscribe(true);
       setBanner(data.error || "Could not open that review.");
       return;
     }
@@ -884,6 +885,12 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
               <h1 className="text-2xl font-bold">Past contract reviews</h1>
               <button type="button" className="text-sm text-blue-600" onClick={() => setStep("landing")}>Back</button>
             </div>
+            {me?.user && !me.isPro && (
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-sm text-blue-900">
+                Free accounts keep your latest check only. Pro keeps every check in your history.{" "}
+                <button type="button" className="font-semibold underline" onClick={() => setShowSubscribe(true)}>Upgrade to Pro</button>
+              </div>
+            )}
             {reviews.length === 0 ? (
               <p className="text-sm text-gray-500">No reviews yet.</p>
             ) : (
