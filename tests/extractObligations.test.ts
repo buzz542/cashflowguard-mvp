@@ -63,7 +63,7 @@ describe("extractObligations (against a fake API)", () => {
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ trigger: "monthly", day_of_month: 25, clause_ref: "4.2" });
 
-    const body = lastBody as { output_config?: { format?: { type: string; schema: Record<string, unknown> } }; messages: Array<{ content: string }>; system: string };
+    const body = lastBody as { output_config?: { effort?: string; format?: { type: string; schema: Record<string, unknown> } }; messages: Array<{ content: string }>; system: Array<{ text: string; cache_control?: unknown }>; thinking?: unknown };
     expect(body.output_config?.format?.type).toBe("json_schema");
     const schema = JSON.stringify(body.output_config!.format!.schema);
     expect(schema).toContain('"additionalProperties":false');
@@ -74,7 +74,11 @@ describe("extractObligations (against a fake API)", () => {
     expect(schema).not.toContain("9007199254740991");
     expect(body.messages[0].content).toContain("CONTRACT TEXT");
     expect(body.messages[0].content).toContain("Subcontractor");
-    expect(body.system).toContain("Never invent");
+    expect(body.system[0].text).toContain("Never invent");
+    expect(body.system[0].cache_control).toEqual({ type: "ephemeral" });
+    // Sonnet 5.5: thinking off via between_tools, effort alongside the schema.
+    expect(body.thinking).toEqual({ type: "between_tools" });
+    expect(body.output_config?.effort).toBe("high");
   });
 
   it("an out-of-list value in one item doesn't lose the others", async () => {

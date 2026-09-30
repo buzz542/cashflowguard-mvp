@@ -21,6 +21,13 @@ export function readBool(env: Env, name: string, fallback: boolean): boolean {
   return fallback;
 }
 
+export const DEFAULT_MODEL = "claude-sonnet-5-5";
+
+function readEffort(raw: string | undefined): "low" | "medium" | "high" {
+  const v = raw?.trim().toLowerCase();
+  return v === "low" || v === "medium" ? v : "high";
+}
+
 export function loadConfig(env: Env = process.env) {
   return {
     /** Free checks per person (per canonical email), lifetime. UI copy says "one". */
@@ -31,10 +38,14 @@ export function loadConfig(env: Env = process.env) {
     freeReviewsGlobalPerDay: readInt(env, "FREE_REVIEWS_GLOBAL_PER_DAY", 200, 0, 100000),
     /** Reviews per user per hour, Pro included. A speed bump, not a plan limit. */
     reviewsPerUserPerHour: readInt(env, "REVIEWS_PER_USER_PER_HOUR", 20, 1, 1000),
-    /** Model for review + OCR. Kept at the model the app shipped with until you choose otherwise. */
-    anthropicModel: env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-4-5",
+    /** Model for review, photo reading and deadline extraction. */
+    anthropicModel: env.ANTHROPIC_MODEL?.trim() || DEFAULT_MODEL,
     /** Model for deadline extraction. Defaults to the review model. */
-    extractionModel: env.ANTHROPIC_EXTRACTION_MODEL?.trim() || env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-4-5",
+    extractionModel: env.ANTHROPIC_EXTRACTION_MODEL?.trim() || env.ANTHROPIC_MODEL?.trim() || DEFAULT_MODEL,
+    /** Sonnet 5.5 only. "off" = no extended thinking (fastest, how the app ran on Sonnet 4.5); "adaptive" = let it think. */
+    anthropicThinking: (env.ANTHROPIC_THINKING?.trim().toLowerCase() === "adaptive" ? "adaptive" : "off") as "off" | "adaptive",
+    /** Sonnet 5.5 only. low | medium | high. "off" thinking allows high at most. */
+    anthropicEffort: readEffort(env.ANTHROPIC_EFFORT),
     /** Deadline extraction + reminders only for Pro. Set false to offer them on the free check too. */
     remindersProOnly: readBool(env, "REMINDERS_PRO_ONLY", true),
     /** Most members (and seats) a team workspace can have. Product targets firms under 25 staff. */

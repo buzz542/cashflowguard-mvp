@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { requireUser, loadWorkspaceContext, jsonError, ACTIVE_WORKSPACE_COOKIE } from "@/lib/session";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { getAnthropic, textFrom } from "@/lib/anthropic";
-import { REVIEW_SYSTEM_PROMPT } from "@/lib/reviewPrompt";
+import { getAnthropic } from "@/lib/anthropic";
+import { streamReview, cleanReview } from "@/lib/reviewStream";
 import { config, PROMPT_VERSION, EXTRACTION_VERSION } from "@/lib/config";
 import { extractObligations } from "@/lib/extractObligations";
 import { remindersAllowed, OBLIGATION_COLUMNS } from "@/lib/reminderScheduler";
@@ -29,6 +29,7 @@ function field(ctx: Record<string, unknown>, key: string, max: number): string {
 }
 
 export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
   try {
     const auth = await requireUser();
     if ("response" in auth) return auth.response;
@@ -109,84 +110,137 @@ ${contractText}`;
         )
       : null;
 
-    let result = "";
-    try {
-      const message = await anthropic.messages.create({
-        model: config.anthropicModel,
-        max_tokens: 8000,
-        system: REVIEW_SYSTEM_PROMPT,
-        messages: [{ role: "user", content: userMessage }]
-      });
-      result = textFrom(message);
-    } catch (e) {
+    const model = config.anthropicModel;
+    const refund = async () => {
       if (freeEventId) await admin.rpc("refund_free_review", { p_event_id: freeEventId });
-      throw e;
-    }
+    };
 
-    if (!result) {
-      if (freeEventId) await admin.rpc("refund_free_review", { p_event_id: freeEventId });
-      return jsonError(502, "No response was generated. Please try again. This check was not counted.");
-    }
+    // From here the response streams: NDJSON lines of {type: "delta" | "done" | "error"}.
+    const encoder = new TextEncoder();
+    const body$ = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        let open = true;
+        const send = (event: Record<string, unknown>) => {
+          if (!open) return;
+          try {
+            controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+          } catch {
+            open = false; // the browser went away; keep going so the result is still saved
+          }
+        };
+        try {
+          let outcome;
+          try {
+            outcome = await streamReview(anthropic, model, userMessage, (text) => send({ type: "delta", text }));
+          } catch (e) {
+            await refund();
+            throw e;
+          }
+          const reviewMs = Date.now() - startedAt;
+          if (!outcome.text) {
+            await refund();
+            console.error("Review empty:", outcome.stopReason);
+            send({ type: "error", error: "No response was generated. Please try again. This check was not counted." });
+            return;
+          }
+          if (outcome.stopReason === "max_tokens") console.error("Review hit max_tokens; returning what was generated");
+          const result = cleanReview(outcome.text);
 
-    result = result
-      .replace(/^\s*\*?\*?Project context used\*?\*?[\s\S]*?(?=##\s*Contract Action Plan|##\s*Executive|##\s*Risk|###\s*[🔴🟠🟢]|$)/i, "")
-      .trim();
-
-    const { data: saved, error: saveErr } = await admin
-      .from("reviews")
-      .insert({
-        workspace_id: ctx.workspace.id,
-        author_id: user.id,
-        trade: trade || null,
-        role: role || null,
-        project_size: projectSize || null,
-        duration: duration || null,
-        result_md: result,
-        model: config.anthropicModel,
-        prompt_version: PROMPT_VERSION,
-        extraction_status: canTrack ? null : "not_run"
-      })
-      .select("id, created_at")
-      .single();
-    // The user has paid for this result (in money or their free check): return it even if saving failed.
-    if (saveErr) console.error("Review save failed:", saveErr.message);
-
-    let obligations: unknown[] = [];
-    let extractionStatus: "ok" | "failed" | "not_run" = "not_run";
-    if (extraction) {
-      const ex = await extraction;
-      extractionStatus = ex.ok ? "ok" : "failed";
-      if (ex.ok && ex.list.length && saved?.id) {
-        const { data: rows, error: obErr } = await admin
-          .from("obligations")
-          .insert(
-            ex.list.map((o) => ({
-              ...o,
+          const { data: row, error: saveErr } = await admin
+            .from("reviews")
+            .insert({
               workspace_id: ctx.workspace.id,
+              author_id: user.id,
+              trade: trade || null,
+              role: role || null,
+              project_size: projectSize || null,
+              duration: duration || null,
+              result_md: result,
+              model,
+              prompt_version: PROMPT_VERSION,
+              extraction_status: canTrack ? null : "not_run",
+              duration_ms: reviewMs
+            })
+            .select("id")
+            .single();
+          // The user has paid for this result (in money or their free check): return it even if saving failed.
+          if (saveErr) console.error("Review save failed:", saveErr.message);
+          const saved = { id: (row?.id as string | undefined) ?? null, ok: !saveErr };
+
+          let obligations: unknown[] = [];
+          let extractionStatus: "ok" | "failed" | "not_run" = "not_run";
+          let extractionMs: number | null = null;
+          if (extraction) {
+            const ex = await extraction;
+            extractionMs = Date.now() - startedAt;
+            extractionStatus = ex.ok ? "ok" : "failed";
+            if (ex.ok && ex.list.length && saved.id) {
+              const { data: rows, error: obErr } = await admin
+                .from("obligations")
+                .insert(
+                  ex.list.map((o) => ({
+                    ...o,
+                    workspace_id: ctx.workspace.id,
+                    review_id: saved.id,
+                    status: "suggested",
+                    extraction_version: EXTRACTION_VERSION
+                  }))
+                )
+                .select(OBLIGATION_COLUMNS);
+              if (obErr) {
+                console.error("Obligation save failed:", obErr.message);
+                extractionStatus = "failed";
+              } else {
+                obligations = rows ?? [];
+              }
+            }
+            if (saved.id) await admin.from("reviews").update({ extraction_status: extractionStatus }).eq("id", saved.id);
+          }
+
+          const totalMs = Date.now() - startedAt;
+          console.log(
+            JSON.stringify({
+              event: "check_timing",
+              model,
               review_id: saved.id,
-              status: "suggested",
-              extraction_version: EXTRACTION_VERSION
-            }))
-          )
-          .select(OBLIGATION_COLUMNS);
-        if (obErr) {
-          console.error("Obligation save failed:", obErr.message);
-          extractionStatus = "failed";
-        } else {
-          obligations = rows ?? [];
+              pro: ctx.isPro,
+              input_chars: contractText.length,
+              ttft_ms: outcome.ttftMs,
+              review_ms: reviewMs,
+              extraction_ms: extractionMs,
+              total_ms: totalMs,
+              input_tokens: outcome.inputTokens,
+              cache_read_tokens: outcome.cacheReadTokens,
+              output_tokens: outcome.outputTokens
+            })
+          );
+
+          send({
+            type: "done",
+            result,
+            isPro: ctx.isPro,
+            reviewId: saved.id,
+            saved: saved.ok,
+            canTrackDeadlines: canTrack,
+            extraction: extractionStatus,
+            obligations,
+            timing: { ms: totalMs }
+          });
+        } catch (e) {
+          console.error("Review error:", e instanceof Error ? e.message : e);
+          send({ type: "error", error: "Review failed. Please try again. This check was not counted." });
+        } finally {
+          open = false;
+          try {
+            controller.close();
+          } catch {
+            /* already closed */
+          }
         }
       }
-      if (saved?.id) await admin.from("reviews").update({ extraction_status: extractionStatus }).eq("id", saved.id);
-    }
-
-    return NextResponse.json({
-      result,
-      isPro: ctx.isPro,
-      reviewId: saved?.id ?? null,
-      saved: !saveErr,
-      canTrackDeadlines: canTrack,
-      extraction: extractionStatus,
-      obligations
+    });
+    return new Response(body$, {
+      headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" }
     });
   } catch (error: unknown) {
     console.error("Review error:", error instanceof Error ? error.message : error);

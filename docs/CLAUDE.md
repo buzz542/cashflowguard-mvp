@@ -16,7 +16,7 @@ The repo is called `cashflowguard-mvp`; the product and `package.json` name are 
 | UI | React 18, Tailwind 3.4 | No component library. `prose` classes on legal pages do nothing (no typography plugin) |
 | Language | TypeScript 5, `strict: true` | Alias `@/*` → `src/*` |
 | Runtime | **Node 22** (`engines`) | Node 20 is EOL; supabase-js and vitest require 22 |
-| AI | `@anthropic-ai/sdk` ^0.129 | Model from `ANTHROPIC_MODEL`, default `claude-sonnet-4-5`. Non-streaming |
+| AI | `@anthropic-ai/sdk` ^0.129 | Model from `ANTHROPIC_MODEL`, default `claude-sonnet-5-5` (thinking off via `between_tools`, effort `high`: `ANTHROPIC_THINKING`, `ANTHROPIC_EFFORT`). Review streams to the browser as NDJSON; system prompts are prompt-cached; server-side refusal fallback on the review call (`lib/anthropic.ts`, `lib/reviewStream.ts`) |
 | Auth + DB | Supabase (`@supabase/supabase-js`, `@supabase/ssr`) | Cookie sessions; Postgres with RLS |
 | Payments | `stripe` ^17 (API `2025-02-24.acacia`) | Checkout, Customer Portal, webhook |
 | File parsing | `pdf-parse`, `mammoth` | `serverComponentsExternalPackages` |
@@ -226,7 +226,7 @@ Files are processed in memory and never persisted. The client continues past a f
 ## Known gaps (still open)
 
 1. ~~**Vercel request body limit**~~ Fixed: `lib/uploadPrep.ts` shrinks photos in the browser; non-image files over 4MB are refused client-side with a clear message.
-2. **Timeouts**: review is non-streaming with `max_tokens: 8000` under `maxDuration: 60`. Long contracts could exceed it.
+2. **Timeouts**: the review streams (`application/x-ndjson`: `delta` lines, then one `done` or `error` line), so text appears within seconds, but the whole check still has to finish inside `maxDuration: 60`. Each check logs a `check_timing` JSON line and stores `reviews.duration_ms` (migration 0006).
 3. ~~**Scanned PDFs** rejected~~ Fixed: transcribed by Claude.
 4. **In-memory rate limits** (per-user hourly, extract) reset on cold start. The free tier itself is durable.
 5. ~~**Refresh loses a check in progress**~~ Fixed: `lib/draft.ts` keeps the draft in sessionStorage (cleared on logout and when the tab closes).

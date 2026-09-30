@@ -50,7 +50,7 @@ From the landing page, metadata and system prompt:
 | Word upload | `.docx` only; `.doc` rejected | `api/extract` |
 | Paste / text upload | `.txt`, `.md`, `.csv` or paste into textarea | `HomeClient.tsx`, `api/extract` |
 | Multi-page | Up to 12 files per selection, more batches allowed; text concatenated. Max 120k chars total | `HomeClient.tsx`, `api/review` |
-| AI contract review | Claude, fixed system prompt (Construction Act 1996, JCT, NEC3/4, FIDIC, bespoke). Model from `ANTHROPIC_MODEL`, default `claude-sonnet-4-5` | `api/review`, `lib/reviewPrompt.ts` |
+| AI contract review | Claude, fixed system prompt (Construction Act 1996, JCT, NEC3/4, FIDIC, bespoke). Model from `ANTHROPIC_MODEL`, default `claude-sonnet-5-5`. Result streams in as it is written, with a progress state | `api/review`, `lib/reviewStream.ts`, `lib/reviewPrompt.ts` |
 | Risk watchlist | Pay-when-paid/pay-if-paid; payment cycles; retention; payment/pay-less notice traps; set-off; flow-down; LADs; variation/EOT notice conditions precedent; suspension rights; indemnity/insurance; "final and conclusive"; other conditions precedent | `lib/reviewPrompt.ts` |
 | Action plan output | 🚨 / 👀 / ✅ → 🔴 RED and 🟠 AMBER detailed risks → Your key actions → Suggested next step: Nothing major stood out / Raise these points before signing / Get professional advice before signing (never "sign" or "don't sign") | `lib/reviewPrompt.ts`, `ReviewResults.tsx` |
 | Copy suggested wording | One-click copy per suggested-wording block | `ReviewResults.tsx` |
@@ -116,7 +116,7 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 - **Data storage**: Supabase Postgres (accounts, workspaces, subscriptions, review results, free-tier ledger). Uploaded files and full contract text are processed in memory and not stored. Contract text is sent to Anthropic.
 - **Third parties**: Anthropic (AI), Stripe (billing), Supabase (auth + database), Resend (reminder email), Vercel (hosting + cron), gov.uk bank holidays feed.
 - **Cost controls**: free checks capped per person, per IP and globally per day. At the README's 5p to 20p per review, the default global cap bounds free spend at roughly £10 to £40/day (not re-measured). **Pro reviews now make two Claude calls** (review + deadline extraction), each sending the full contract, so Pro input cost per check roughly doubles. `ANTHROPIC_EXTRACTION_MODEL` can point extraction at a cheaper model if quality holds.
-- **Latency**: non-streaming, up to 8k output tokens, 60s function limit; SDK timeout 55s with one retry.
+- **Latency**: streamed to the browser; up to 8k output tokens, 60s function limit; SDK timeout 55s with one retry. Photos are read 3 at a time in parallel; deadline extraction runs alongside the review. Timing per check is logged and stored (`reviews.duration_ms`). Old vs new model timings: `npm run eval:timing` (needs an API key).
 - **Tests**: unit tests (vitest), SQL/RLS tests against a local Postgres (`npm run test:db`), typecheck, build.
 - **Accessibility / i18n**: `en-GB`, British English throughout. No specific a11y work beyond semantic buttons.
 
@@ -169,7 +169,7 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 **Brand, domain and claims**
 20. Canonical domain. **Resolved:** `https://www.guardconstruct.com` (the apex 308-redirects to www). Set as `NEXT_PUBLIC_APP_URL` in Vercel production; Supabase Site URL and Stripe return/webhook URLs use www too.
 21. "Trusted by early UK contractors". **Default shipped:** relabelled "Built for UK trades" (no unverified endorsement claim under ASA/CAP rules). Put a real claim back once you have customers who agree to it.
-22. Model. **Default shipped:** unchanged `claude-sonnet-4-5`, now `ANTHROPIC_MODEL`. Newer models exist; switching changes cost and output and should be tested on real contracts first.
+22. Model. **Resolved (owner, 2026-09-30):** Claude Sonnet 5.5 (`claude-sonnet-5-5`) via `ANTHROPIC_MODEL`. Thinking off by default to match how Sonnet 4.5 ran; `ANTHROPIC_THINKING=adaptive` turns it on.
 
 **Legal/compliance**
 23. Anthropic data retention statement. **Needs you:** check your Anthropic commercial terms/DPA and add one sentence to the privacy policy.

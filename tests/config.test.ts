@@ -5,7 +5,9 @@ describe("config", () => {
   it("defaults match the product as shipped", () => {
     const c = loadConfig({});
     expect(c.freeReviewLimit).toBe(1);
-    expect(c.anthropicModel).toBe("claude-sonnet-4-5");
+    expect(c.anthropicModel).toBe("claude-sonnet-5-5");
+    expect(c.anthropicThinking).toBe("off");
+    expect(c.anthropicEffort).toBe("high");
   });
   it("reads overrides and rejects out-of-range values", () => {
     expect(readInt({ X: "5" }, "X", 1, 0, 10)).toBe(5);

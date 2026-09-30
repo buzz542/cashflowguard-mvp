@@ -1,5 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import { textFrom } from "./anthropic";
+import { textFrom, reasoningParams } from "./anthropic";
 import { config } from "./config";
 
 export const TRANSCRIBE_PROMPT =
@@ -8,12 +8,13 @@ export const TRANSCRIBE_PROMPT =
 type ImageType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
 /** One photographed page → text. */
-export async function transcribeImage(anthropic: Anthropic, buffer: Buffer, mimeType: string): Promise<string> {
+export async function transcribeImage(anthropic: Anthropic, buffer: Buffer, mimeType: string, model = config.anthropicModel): Promise<string> {
   const mediaType: ImageType = (["image/png", "image/gif", "image/webp"] as string[]).includes(mimeType)
     ? (mimeType as ImageType)
     : "image/jpeg";
   const message = await anthropic.messages.create({
-    model: config.anthropicModel,
+    model,
+    ...reasoningParams(model),
     max_tokens: 8000,
     messages: [
       {
@@ -29,9 +30,10 @@ export async function transcribeImage(anthropic: Anthropic, buffer: Buffer, mime
 }
 
 /** A scanned PDF (no text layer): Claude reads the page images directly. */
-export async function transcribeScannedPdf(anthropic: Anthropic, buffer: Buffer): Promise<string> {
+export async function transcribeScannedPdf(anthropic: Anthropic, buffer: Buffer, model = config.anthropicModel): Promise<string> {
   const message = await anthropic.messages.create({
-    model: config.anthropicModel,
+    model,
+    ...reasoningParams(model),
     max_tokens: 16000,
     messages: [
       {

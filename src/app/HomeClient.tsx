@@ -10,6 +10,7 @@ import { DeadlinesPanel, DeadlinesView } from "./DeadlinesPanel";
 import { TeamView } from "./TeamPanel";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
 import { prepareUpload } from "@/lib/uploadPrep";
+import { readNdjson, mapLimit } from "@/lib/ndjson";
 import { DRAFT_KEY, parseDraft, type Draft } from "@/lib/draft";
 import type { Me, ReviewSummary, ApiError, ObligationRow, JobRow, TeamInfo } from "@/lib/clientTypes";
 
@@ -58,6 +59,8 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
   const [error, setError] = useState("");
   const [banner, setBanner] = useState("");
   const [extracting, setExtracting] = useState(false);
+  const [streamed, setStreamed] = useState("");
+  const [elapsed, setElapsed] = useState(0);
   const [showSubscribe, setShowSubscribe] = useState(false);
   const [subscribeError, setSubscribeError] = useState("");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -488,7 +491,8 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
     let combined = contractText;
     const names = [...pages];
     const failed: string[] = [];
-    for (const file of Array.from(files).slice(0, 12)) {
+    // Pages are read in parallel (3 at a time) and joined back in the order they were picked.
+    const results = await mapLimit(Array.from(files).slice(0, 12), 3, async (file) => {
       try {
         const form = new FormData();
         form.append("file", await prepareUpload(file));
@@ -496,14 +500,17 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
         if (res.status === 413) throw new Error("File is too large to upload. Try a smaller photo or PDF.");
         const data = await readJson<{ text: string; fileName: string }>(res);
         if (!res.ok) throw new Error(data.error || "Could not read file");
-        const text = (data.text || "").trim();
-        if (!text) continue;
-        const label = data.fileName || file.name;
-        combined = combined ? combined + "\n\n--- " + label + " ---\n\n" + text : text;
-        names.push(label);
+        return { ok: true as const, text: (data.text || "").trim(), label: data.fileName || file.name };
       } catch (err: unknown) {
         // Keep going: one bad page shouldn't throw away the pages that did work.
-        failed.push(`${file.name}: ${err instanceof Error ? err.message : "failed"}`);
+        return { ok: false as const, error: `${file.name}: ${err instanceof Error ? err.message : "failed"}` };
+      }
+    });
+    for (const r of results) {
+      if (!r.ok) failed.push(r.error);
+      else if (r.text) {
+        combined = combined ? combined + "\n\n--- " + r.label + " ---\n\n" + r.text : r.text;
+        names.push(r.label);
       }
     }
     setContractText(combined);
@@ -520,21 +527,19 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
       return;
     }
     setError("");
+    setStreamed("");
+    setElapsed(0);
     setStep("loading");
+    const started = Date.now();
+    const timer = setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 1000);
     try {
       const res = await fetch("/api/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ context, contractText })
       });
-      const data = await readJson<{
-        result: string;
-        saved: boolean;
-        reviewId: string | null;
-        obligations: ObligationRow[];
-        extraction: Extraction;
-      }>(res);
-      if (!res.ok) {
+      if (!res.ok || !res.body || !(res.headers.get("content-type") || "").includes("ndjson")) {
+        const data = await readJson<object>(res);
         setStep("upload");
         if (data.code === "upgrade_required") return setShowSubscribe(true);
         if (data.code === "terms_required") {
@@ -544,6 +549,25 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
         if (data.code === "unauthenticated") return setAuthMode("login");
         throw new Error(data.error || "Review failed");
       }
+      type Done = {
+        result: string;
+        saved: boolean;
+        reviewId: string | null;
+        obligations: ObligationRow[];
+        extraction: Extraction;
+      };
+      let done: Done | null = null;
+      let failure = "";
+      let text = "";
+      await readNdjson(res.body, (ev) => {
+        if (ev.type === "delta" && typeof ev.text === "string") {
+          text += ev.text;
+          setStreamed(text);
+        } else if (ev.type === "done") done = ev as unknown as Done;
+        else if (ev.type === "error") failure = typeof ev.error === "string" ? ev.error : "Review failed";
+      });
+      const data = done as Done | null;
+      if (!data) throw new Error(failure || "The connection dropped before the check finished. If it was saved, it will be in your history.");
       setResult(data.result);
       setReviewId(data.reviewId);
       setReviewTrade(context.trade);
@@ -557,6 +581,8 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
       setStep("upload");
+    } finally {
+      clearInterval(timer);
     }
   };
 
@@ -952,10 +978,22 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
         )}
 
         {step === "loading" && (
-          <div className="text-center py-16">
-            <div className="text-3xl animate-pulse">⏳</div>
-            <h1 className="text-xl font-bold mt-4">Building your action plan…</h1>
-            <p className="text-sm text-gray-500 mt-2">Automated AI summary — not legal advice</p>
+          <div className="space-y-4" aria-live="polite">
+            <div className="text-center pt-8">
+              <div className="text-3xl animate-pulse">⏳</div>
+              <h1 className="text-xl font-bold mt-4">
+                {streamed ? "Writing your action plan…" : "Reading your contract…"}
+              </h1>
+              <p className="text-sm text-gray-500 mt-1">
+                {elapsed}s · checking retention, pay-when-paid, notice deadlines, LADs and payment terms
+              </p>
+              <p className="text-sm text-gray-500 mt-2">Automated AI summary — not legal advice</p>
+            </div>
+            {streamed && (
+              <div className="bg-white rounded-2xl border p-5 opacity-90">
+                <ReviewResults result={streamed} />
+              </div>
+            )}
           </div>
         )}
 

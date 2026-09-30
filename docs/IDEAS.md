@@ -2,7 +2,6 @@
 
 Things noticed along the way that are outside the PRD. Parked here rather than built.
 
-- Stream the review to the browser as it's generated (better perceived speed; would also allow a longer `maxDuration`).
 - SMS or calendar (.ics) export for deadline reminders.
 - Annual plan / free trial.
 - Stripe Tax (if VAT-registered).

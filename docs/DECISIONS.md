@@ -14,7 +14,7 @@ Product and technical choices made without asking, per the instruction to pick t
 | Auth provider | Supabase (email + password or magic link, email confirmation required) | n/a |
 | Full contract text | Never stored; review result + job context only | n/a |
 | History retention | Until the user deletes it or their account | n/a |
-| Model | Unchanged `claude-sonnet-4-5` for review, OCR and extraction | `ANTHROPIC_MODEL`, `ANTHROPIC_EXTRACTION_MODEL` |
+| Model | `claude-sonnet-5-5` for review, OCR and extraction (was `claude-sonnet-4-5`) | `ANTHROPIC_MODEL`, `ANTHROPIC_EXTRACTION_MODEL` |
 | Reminders | Pro-only, email only, 2 working days before + on the day | `REMINDERS_PRO_ONLY`, `LEAD_WORKING_DAYS` |
 | "Days" not specified in contract | Use the earlier of calendar/working-day dates | `lib/deadlines.ts` |
 | Team pricing | Per seat at the Pro price unless `STRIPE_TEAM_PRICE_ID` is set; max 25 people/team; 3 teams per owner | `STRIPE_TEAM_PRICE_ID`, `MAX_TEAM_SEATS`, `MAX_OWNED_TEAMS` |
@@ -58,3 +58,28 @@ Product and technical choices made without asking, per the instruction to pick t
 | Billing portal | Cancel at period end, quantity changes on the £19 price with prorations, return URL + privacy/terms links set | Team seats are managed as subscription quantity |
 | Production env set by Claude | `STRIPE_WEBHOOK_SECRET`, `CRON_SECRET`, `IP_HASH_SALT` (sensitive, random), `NEXT_PUBLIC_APP_URL` | Everything that didn't need an account I don't have |
 | Merge to main | Held until Supabase env vars exist | Merging without them breaks sign-in, history and the free-tier ledger in production |
+
+## Round 3: shippable MVP (2026-09-30)
+
+### 1. Speed
+
+| Decision | Choice | Why |
+|---|---|---|
+| Model id | `claude-sonnet-5-5`, checked against platform.claude.com/docs models overview on 2026-09-30 (docs.claude.com redirects there). Not yet called live: no API key in this environment | Owner's brief |
+| Thinking | Off (`thinking: {type: "between_tools"}`), effort `high` | Sonnet 4.5 ran with no thinking, so this is like-for-like and the fastest setting. `{type: "disabled"}` is a 400 on Sonnet 5.5. `ANTHROPIC_THINKING=adaptive` turns it on if quality needs it |
+| Params for other models | None sent (no thinking/effort) | Sonnet 4.5 rejects `effort`; lets the timing eval run the old model unchanged |
+| Streaming | `/api/review` returns NDJSON (`delta` lines, then `done` or `error`). Pre-flight failures (auth, limits, terms) stay normal JSON errors with status codes | Simplest format a `fetch` reader can parse; keeps existing client error handling |
+| Browser disconnect mid-stream | Server carries on and saves the result | The user paid for it; it appears in history |
+| Prompt caching | `cache_control: ephemeral` on the review and extraction system prompts | Identical on every call; Sonnet 5.5 caches prefixes from 512 tokens |
+| Refusal fallback | `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`) on the review call only. A refusal with no fallback counts as no result: free check refunded | Recommended default for Sonnet 5.5; review is the paid output. Extraction/OCR stay on the plain API (failure there is already handled) |
+| Parallel steps | Photos read 3 at a time (order kept); extraction already ran alongside the review | Independent calls; 3 keeps under Anthropic and Vercel concurrency comfortably |
+| Timing log | One `check_timing` JSON log line per check (ttft, review, extraction, total ms, tokens, cache reads) and `reviews.duration_ms` (migration 0006, additive) | "Log processing time per check" |
+| Timing comparison | Harness `npm run eval:timing` on committed fixtures (`evals/fixtures/sample-subcontract.{jpg,pdf,docx}`), writes `evals/timing-results.md` | **Not run: no `ANTHROPIC_API_KEY` here.** Table below is to be filled from that file |
+
+Before/after timings (one-page sample, photo / PDF / Word):
+
+| Input | claude-sonnet-4-5 | claude-sonnet-5-5 |
+|---|---|---|
+| Photo | not measured (no API key) | not measured (no API key) |
+| PDF | not measured (no API key) | not measured (no API key) |
+| Word | not measured (no API key) | not measured (no API key) |
