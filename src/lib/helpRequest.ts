@@ -56,7 +56,10 @@ export function parseHelpRequest(body: unknown): { ok: true; value: HelpRequestI
   const contactName = text(b.contactName, 120);
   if (!contactName) return { ok: false, error: "Enter your name." };
   const contactEmail = text(b.contactEmail, 254).toLowerCase();
-  if (!canonicalEmail(contactEmail)) return { ok: false, error: "Enter a valid email address." };
+  // Also used as the Reply-To header: no commas, quotes or angle brackets.
+  if (!canonicalEmail(contactEmail) || !/^[^\s@,;<>"()]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(contactEmail)) {
+    return { ok: false, error: "Enter a valid email address." };
+  }
   const phone = text(b.contactPhone, 40);
   if (phone && !/^[+()\d\s-]{6,40}$/.test(phone)) return { ok: false, error: "Enter a valid phone number, or leave it blank." };
   const notes = text(b.notes, 2000);

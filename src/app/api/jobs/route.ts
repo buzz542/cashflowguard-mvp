@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { isJurisdiction } from "@/lib/bankHolidays";
 import { remindersAllowed } from "@/lib/reminderScheduler";
 import { roleIn, UUID_RE } from "@/lib/membership";
+import { rateLimit } from "@/lib/rateLimit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -15,6 +16,7 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   const auth = await requireUser();
   if ("response" in auth) return auth.response;
+  if (!rateLimit(`jobs:${auth.user.id}`, 120, 60 * 60 * 1000).ok) return jsonError(429, "Too many changes in a short time. Please try again later.");
   try {
     const ctx = await loadWorkspaceContext(auth.user, auth.email, req.cookies.get(ACTIVE_WORKSPACE_COOKIE)?.value);
     if (!remindersAllowed(ctx.isPro)) return jsonError(402, "Deadline reminders are part of Pro.", "upgrade_required");

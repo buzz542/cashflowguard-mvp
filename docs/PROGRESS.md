@@ -10,7 +10,7 @@ Scope from the owner's brief. Each item: implement, test, `npm run check` green,
 - [x] 4. "Need help getting paid?": button on overdue items and results, form with consent, saved to DB, emailed to ADMIN_EMAIL, never shared automatically.
 - [x] 5. Payments and limits: one free check per account (server-side, account + IP limits), Stripe Checkout £19/month, portal, webhooks grant and revoke (incl. invoice.payment_failed). Test mode only.
 - [x] 6. Site copy: Roadmap and Pricing match what's built (team seats "planned"), Privacy and Terms cover storage, deletion and referral disclosure.
-- [ ] 7. Security pass.
+- [x] 7. Security pass.
 - [ ] 8. End-to-end test.
 
 ## Round 2 (earlier today)

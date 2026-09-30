@@ -139,3 +139,16 @@ Before/after timings (one-page sample, photo / PDF / Word):
 | Pricing | Free: one check, latest result saved, help requests. Pro: unlimited (fair use 20/hour), full history, project tracking, reminder schedule | Lists only what's built |
 | Terms version | Bumped to `2026-09-30.1`: everyone re-accepts | The referral-fee disclosure is a material change |
 | Referral wording | Terms §5C and Privacy say a partner "may pay us a referral fee", only with the consent tick, passed on by hand. No promise about partners' own fees | Accurate without committing to things we don't control |
+
+### 7. Security pass (2026-09-30)
+
+| Area | Finding | Action |
+|---|---|---|
+| Auth on every route | All 30 routes checked. Each requires a signed-in user except: `/api/me` (returns `{user: null}` when signed out), Stripe webhook (signature), cron (bearer secret, constant-time compare), unsubscribe (HMAC token), auth callback (Supabase code/OTP, fixed redirect to `/`) | None needed |
+| Per-user isolation | Reads go through RLS as the user; writes use the service role only after a membership check (`roleIn`). New routes follow this (help links an item/review only if the caller is a member). SQL tests prove cross-user reads fail for reviews, jobs, obligations, help requests | None needed |
+| Uploads | 4.5MB cap, extension/MIME allowlist (PDF, DOCX, TXT, JPEG/PNG/GIF/WEBP; HEIC and .doc refused), scanned PDFs max 20 pages, contract text max 120k chars, files never stored | None needed |
+| Secrets in client code | Only `NEXT_PUBLIC_SUPABASE_URL`/`ANON_KEY`/`APP_URL` reach the browser; built client chunks scanned for server secret names: none; no keys in git | None needed |
+| Rate limits | Checks, uploads, help, invites, checkout, portal, import already limited. Project and item creation weren't | Added 120/hour per user on `POST /api/jobs` and `POST /api/obligations` |
+| Error messages | No route returns an exception message; all are fixed strings | None needed |
+| Email header injection | Help request contact email becomes Reply-To | Tightened: no commas, semicolons, quotes, angle brackets; subject strips newlines |
+| Known, accepted | In-memory hourly limits reset per server instance (the durable limits are in Postgres); CSP keeps `'unsafe-inline'`/`'unsafe-eval'` for Next.js scripts | Already in IDEAS.md / unchanged |

@@ -27,6 +27,8 @@ describe("parseHelpRequest", () => {
     expect(parseHelpRequest({ ...good, daysOverdue: -1 }).ok).toBe(false);
     expect(parseHelpRequest({ ...good, payLessNotice: "maybe" }).ok).toBe(false);
     expect(parseHelpRequest({ ...good, contactEmail: "a@@b.com" }).ok).toBe(false);
+    expect(parseHelpRequest({ ...good, contactEmail: "a,b@example.com" }).ok).toBe(false);
+    expect(parseHelpRequest({ ...good, contactEmail: "<x>@example.com" }).ok).toBe(false);
     expect(parseHelpRequest({ ...good, contactPhone: "call me" }).ok).toBe(false);
     expect(parseHelpRequest(null).ok).toBe(false);
   });

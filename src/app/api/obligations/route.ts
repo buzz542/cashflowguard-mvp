@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { isIsoDate, addCalendarDays, compareDates, ukToday } from "@/lib/deadlines";
 import { remindersAllowed, rescheduleObligation } from "@/lib/reminderScheduler";
 import { roleIn, UUID_RE } from "@/lib/membership";
+import { rateLimit } from "@/lib/rateLimit";
 import { MANUAL_KINDS } from "@/lib/obligationKinds";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   const auth = await requireUser();
   if ("response" in auth) return auth.response;
+  if (!rateLimit(`items:${auth.user.id}`, 120, 60 * 60 * 1000).ok) return jsonError(429, "Too many changes in a short time. Please try again later.");
   try {
     const body = await req.json().catch(() => ({}));
     const jobId = typeof body.jobId === "string" && UUID_RE.test(body.jobId) ? body.jobId : null;
