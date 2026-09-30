@@ -56,25 +56,38 @@ describe("nextMonthlyDue", () => {
 });
 
 describe("reminderSlots", () => {
-  it("heads-up two working days before, and on the day", () => {
-    expect(reminderSlots("2026-10-09", "2026-09-29", ew)).toEqual([
-      { sendOn: "2026-10-07", kind: "lead" },
-      { sendOn: "2026-10-09", kind: "due" }
+  it("7 days, 2 days, on the day, and the day after if still open", () => {
+    expect(reminderSlots("2026-10-20", "2026-10-01")).toEqual([
+      { sendOn: "2026-10-13", kind: "lead7" },
+      { sendOn: "2026-10-18", kind: "lead2" },
+      { sendOn: "2026-10-20", kind: "due" },
+      { sendOn: "2026-10-21", kind: "overdue" }
     ]);
   });
-  it("lead time skips the Easter bank holidays", () => {
-    // Due Tue 7 Apr 2026: two working days before is Wed 1 Apr (skips Mon 6 and Fri 3)
-    expect(reminderSlots("2026-04-07", "2026-03-20", ew)[0]).toEqual({ sendOn: "2026-04-01", kind: "lead" });
+  it("counts calendar days (weekends included), as the reminders are a prompt, not the contract", () => {
+    expect(reminderSlots("2026-10-19", "2026-10-01")[1]).toEqual({ sendOn: "2026-10-17", kind: "lead2" });
   });
-  it("late confirmation sends the heads-up today", () => {
-    expect(reminderSlots("2026-10-09", "2026-10-08", ew)).toEqual([
-      { sendOn: "2026-10-08", kind: "lead" },
-      { sendOn: "2026-10-09", kind: "due" }
+  it("drops heads-ups that have gone; if both have, one goes today", () => {
+    expect(reminderSlots("2026-10-20", "2026-10-15").map((s) => s.kind)).toEqual(["lead2", "due", "overdue"]);
+    expect(reminderSlots("2026-10-20", "2026-10-19")).toEqual([
+      { sendOn: "2026-10-19", kind: "lead2" },
+      { sendOn: "2026-10-20", kind: "due" },
+      { sendOn: "2026-10-21", kind: "overdue" }
     ]);
   });
-  it("due today: one reminder; past: none", () => {
-    expect(reminderSlots("2026-10-09", "2026-10-09", ew)).toEqual([{ sendOn: "2026-10-09", kind: "due" }]);
-    expect(reminderSlots("2026-10-09", "2026-10-10", ew)).toEqual([]);
+  it("due today: on the day + overdue; already past: one overdue notice today", () => {
+    expect(reminderSlots("2026-10-20", "2026-10-20").map((s) => s.kind)).toEqual(["due", "overdue"]);
+    expect(reminderSlots("2026-10-20", "2026-10-21")).toEqual([{ sendOn: "2026-10-21", kind: "overdue" }]);
+    expect(reminderSlots("2026-10-20", "2026-11-02")).toEqual([{ sendOn: "2026-11-02", kind: "overdue" }]);
+  });
+  it("never schedules a kind already sent this cycle (no duplicate emails after edits)", () => {
+    const sent = [{ kind: "overdue", sendOn: "2026-10-21" }];
+    expect(reminderSlots("2026-10-20", "2026-10-25", sent)).toEqual([]);
+    expect(reminderSlots("2026-10-20", "2026-10-19", [{ kind: "lead2", sendOn: "2026-10-18" }]).map((s) => s.kind)).toEqual(["due", "overdue"]);
+  });
+  it("a new cycle (next month, or a date moved well out) starts fresh", () => {
+    const lastMonth = [{ kind: "lead7", sendOn: "2026-09-13" }, { kind: "due", sendOn: "2026-09-20" }];
+    expect(reminderSlots("2026-10-20", "2026-09-21", lastMonth).map((s) => s.kind)).toEqual(["lead7", "lead2", "due", "overdue"]);
   });
 });
 

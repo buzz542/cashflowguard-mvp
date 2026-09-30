@@ -49,7 +49,7 @@ See `.env.example` for the full list with comments. Key ones:
 | `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET` | Billing |
 | `IP_HASH_SALT` | Hashing IPs for the free-tier ledger |
 | `RESEND_API_KEY`, `EMAIL_FROM` | Reminder emails (`lib/email.ts`) |
-| `CRON_SECRET` | Bearer token Vercel Cron sends to `/api/cron/reminders` |
+| `CRON_SECRET` | Bearer token Vercel Cron sends to `/api/cron/reminders`; also signs unsubscribe links unless `UNSUBSCRIBE_SECRET` is set |
 | `REMINDERS_PRO_ONLY`, `ANTHROPIC_EXTRACTION_MODEL` | Deadline extraction + reminders |
 | `STRIPE_TEAM_PRICE_ID`, `MAX_TEAM_SEATS`, `MAX_OWNED_TEAMS`, `INVITE_TTL_DAYS` | Teams |
 | `FREE_REVIEW_LIMIT`, `FREE_REVIEWS_PER_IP_PER_DAY`, `FREE_REVIEWS_GLOBAL_PER_DAY`, `REVIEWS_PER_USER_PER_HOUR` | `src/lib/config.ts` |
@@ -175,15 +175,16 @@ Photo uploads: `claimPhotoPage()` (`lib/ocrAllowance.ts`) lets non-Pro users hav
 
 `/api/review` calls `claim_free_review(canonical_email, ip_hash, limits…)` **before** calling Claude. It serialises on an advisory lock and checks, in order: per-person lifetime limit, per-IP 24h limit, service-wide daily cap. Returns `ok | user_limit | ip_limit | global_limit`. On AI failure or empty output the route calls `refund_free_review`. `canonicalEmail()` lowercases, strips `+tags`, and for Gmail drops dots.
 
-## Deadline reminders
+## Project tracking and deadline reminders
 
 Flow: `/api/review` runs `extractObligations()` **in parallel** with the review (only for users allowed reminders), because the full contract text only exists in memory for that request. Results are saved as `obligations` with `status = 'suggested'` and `reviews.extraction_status` records ok/failed/not_run. Extraction failing never fails the review.
 
 - **Extraction is untrusted.** The SDK's `messages.parse()` throws on any schema mismatch, so the output format is a permissive wire schema (strings, not enums) and `sanitizeObligations()` validates each item on its own, dropping bad ones. Never "repair" a missing period or date.
-- **Nothing is scheduled until the user confirms.** Confirming requires a job (`POST /api/jobs` links the review and its obligations). Event-triggered deadlines have no due date until the user enters the event date.
+- **Nothing is scheduled until the user confirms.** Confirming requires a job (project). `POST /api/jobs` with `reviewId` links the review and its obligations; without it, it creates an empty project. Event-triggered deadlines have no due date until the user enters the event date.
+- **Manual items**: `POST /api/obligations` adds a user's own dated item to a project (`source = 'manual'`, no `review_id`, `trigger` fixed_date or monthly, status confirmed straight away). `PATCH /api/obligations/[id]` `status: "done"` marks it done (monthly: sets `done_through` and moves on). Shown statuses come from `lib/trackingStatus.ts`.
 - **Date rules** (`deadlines.ts`): `calendar`/`working` as the contract says; `unspecified` → the earlier of the two. Working days skip weekends + the job's nation's bank holidays (`bankHolidays.ts`: gov.uk feed cached a day, rule-based fallback and future years). `manual` dates always win.
-- **Reminders**: `rescheduleObligation()` recomputes the due date and replaces pending `reminders` rows (lead = 2 working days before, and on the day; a lead date already past becomes today). Call it after *any* change to an obligation.
-- **Sender**: `/api/cron/reminders` (Vercel Cron, daily 06:00 UTC, `CRON_SECRET`). Rolls monthly deadlines forward, then `claim_due_reminders()` atomically skips invalid rows (unconfirmed, past, opted out) and claims due ones (`FOR UPDATE SKIP LOCKED`; stale `sending` retried after 30 min, max 3, never after the due date). Re-checks Pro, sends one digest per user, marks sent.
+- **Reminders**: `rescheduleObligation()` recomputes the due date and replaces pending `reminders` rows via `reminderSlots()`: `lead7`, `lead2`, `due`, `overdue` (calendar days −7, −2, 0, +1). A kind already sent in the current cycle is never re-added, so edits can't duplicate emails. Call it after *any* change to an obligation.
+- **Sender**: `/api/cron/reminders` (Vercel Cron, daily 06:00 UTC, `CRON_SECRET`). `claim_due_reminders()` (replaced in migration 0007) atomically skips invalid rows (not confirmed, past except `overdue`, opted out) and claims due ones (`FOR UPDATE SKIP LOCKED`; stale `sending` retried after 30 min, max 3). Re-checks Pro, sends one digest per user with a signed unsubscribe link (`lib/unsubscribe.ts`, `/api/unsubscribe`), marks sent, then rolls monthly items forward.
 - Emails escape all contract-derived text (`reminderEmail.ts`). Keep it that way.
 - Bump `EXTRACTION_VERSION` when the extraction prompt/schema changes (stored per obligation).
 

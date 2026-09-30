@@ -864,7 +864,8 @@ export default function HomeClient({ freeLimit, remindersProOnly }: { freeLimit:
         )}
 
         {step === "deadlines" && (
-          <DeadlinesView onBack={() => setStep("landing")} onOpenReview={openReview} members={teamMembers} />
+          <DeadlinesView onBack={() => setStep("landing")} onOpenReview={openReview} members={teamMembers}
+            canTrack={!!me?.canTrackDeadlines} onUpgrade={() => setShowSubscribe(true)} />
         )}
 
         {step === "team" && me?.workspace && (

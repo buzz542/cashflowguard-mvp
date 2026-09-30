@@ -5,7 +5,8 @@ import { isUserProInWorkspace } from "@/lib/session";
 import { config, appOrigin } from "@/lib/config";
 import { ukToday } from "@/lib/deadlines";
 import { rescheduleObligation } from "@/lib/reminderScheduler";
-import { renderDigest, type DigestItem } from "@/lib/reminderEmail";
+import { renderDigest, moreUrgent, type DigestItem } from "@/lib/reminderEmail";
+import { unsubscribeUrl } from "@/lib/unsubscribe";
 import { emailConfigured, sendEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,7 @@ type Claimed = {
   reminder_id: string;
   user_id: string;
   email: string;
-  reminder_kind: "lead" | "due";
+  reminder_kind: DigestItem["reminderKind"];
   obligation_id: string;
   obligation_kind: string;
   title: string;
@@ -40,8 +41,8 @@ function authorised(req: NextRequest): boolean {
 }
 
 /**
- * Daily (vercel.json). Rolls monthly deadlines forward, claims due reminders, and sends
- * one digest email per person. Safe to re-run: claimed rows can't be claimed twice.
+ * Daily (vercel.json). Claims due reminders, sends one digest email per person, then rolls
+ * monthly items forward. Safe to re-run: claimed rows can't be claimed twice.
  */
 export async function GET(req: NextRequest) {
   if (!authorised(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -60,24 +61,6 @@ export async function GET(req: NextRequest) {
     .delete()
     .or(`accepted_at.not.is.null,expires_at.lt.${new Date().toISOString()}`);
   if (invErr) console.error("invite cleanup:", invErr.message);
-
-  // 1. Monthly deadlines whose date has passed move to next month (and get new reminders).
-  const { data: stale } = await admin
-    .from("obligations")
-    .select("id")
-    .eq("status", "confirmed")
-    .eq("trigger", "monthly")
-    .neq("due_basis", "manual")
-    .lt("due_date", today)
-    .limit(BATCH);
-  for (const o of stale ?? []) {
-    try {
-      await rescheduleObligation(admin, o.id as string, today);
-      summary.rolled++;
-    } catch (e) {
-      console.error("roll monthly:", e instanceof Error ? e.message : e);
-    }
-  }
 
   // 2. Claim.
   const { data, error } = await admin.rpc("claim_due_reminders", { p_today: today, p_limit: BATCH });
@@ -121,18 +104,38 @@ export async function GET(req: NextRequest) {
         dueDate: r.due_date,
         dueBasis: r.due_basis,
         jobName: r.job_name,
-        reminderKind: prev?.reminderKind === "due" || r.reminder_kind === "due" ? "due" : "lead"
+        reminderKind: moreUrgent(prev?.reminderKind, r.reminder_kind)
       });
     }
     const ids = rows.map((r) => r.reminder_id);
     try {
-      await sendEmail({ to: rows[0].email, ...renderDigest(Array.from(perObligation.values()), appUrl) });
+      const unsub = unsubscribeUrl(appUrl, rows[0].user_id);
+      await sendEmail({ to: rows[0].email, ...renderDigest(Array.from(perObligation.values()), appUrl, unsub), unsubscribeUrl: unsub });
       await admin.from("reminders").update({ status: "sent", sent_at: new Date().toISOString() }).in("id", ids);
       summary.sent += ids.length;
     } catch (e) {
       console.error("reminder send failed:", e instanceof Error ? e.message : e);
       // Leave as 'sending': claim_due_reminders retries after 30 minutes, up to 3 attempts.
       summary.failed += ids.length;
+    }
+  }
+
+  // 5. Monthly items whose date has passed move to next month (and get new reminders). After
+  //    sending, so the overdue notice for the one just missed goes out first.
+  const { data: stale } = await admin
+    .from("obligations")
+    .select("id")
+    .eq("status", "confirmed")
+    .eq("trigger", "monthly")
+    .neq("due_basis", "manual")
+    .lt("due_date", today)
+    .limit(BATCH);
+  for (const o of stale ?? []) {
+    try {
+      await rescheduleObligation(admin, o.id as string, today);
+      summary.rolled++;
+    } catch (e) {
+      console.error("roll monthly:", e instanceof Error ? e.message : e);
     }
   }
 

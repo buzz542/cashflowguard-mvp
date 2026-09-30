@@ -8,7 +8,10 @@ import { roleIn, UUID_RE } from "@/lib/membership";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** Start tracking a reviewed contract as a job: `{ reviewId, name, jurisdiction }`. */
+/**
+ * Create a project: `{ name, jurisdiction, reviewId? }`. With `reviewId`, the reviewed contract
+ * and its extracted deadlines are attached to it; without, it starts empty for the user's own items.
+ */
 export async function POST(req: NextRequest) {
   const auth = await requireUser();
   if ("response" in auth) return auth.response;
@@ -20,10 +23,18 @@ export async function POST(req: NextRequest) {
     const reviewId = typeof body.reviewId === "string" && UUID_RE.test(body.reviewId) ? body.reviewId : null;
     const name = typeof body.name === "string" ? body.name.trim().slice(0, 120) : "";
     const jurisdiction = isJurisdiction(body.jurisdiction) ? body.jurisdiction : "england-and-wales";
-    if (!reviewId) return jsonError(400, "Missing review.");
-    if (!name) return jsonError(400, "Give the job a name.");
+    if (!name) return jsonError(400, "Give the project a name.");
 
     const admin = getSupabaseAdmin();
+    if (!reviewId) {
+      const { data: job, error } = await admin
+        .from("jobs")
+        .insert({ workspace_id: ctx.workspace.id, created_by: auth.user.id, name, jurisdiction })
+        .select("id, name, jurisdiction, created_at")
+        .single();
+      if (error || !job) throw new Error(error?.message ?? "job insert failed");
+      return NextResponse.json({ job });
+    }
     const { data: review } = await admin.from("reviews").select("id, workspace_id, job_id").eq("id", reviewId).maybeSingle();
     if (!review || !(await roleIn(admin, review.workspace_id, auth.user.id))) return jsonError(404, "Review not found.");
     if (review.job_id) return jsonError(409, "This contract is already being tracked.", "already_tracked");

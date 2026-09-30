@@ -8,11 +8,13 @@ import { roleIn, UUID_RE } from "@/lib/membership";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const STATUSES = new Set(["suggested", "confirmed", "dismissed"]);
+const STATUSES = new Set(["suggested", "confirmed", "dismissed", "done"]);
 
 /**
- * Update one extracted deadline:
- *   status     "confirmed" | "dismissed" | "suggested"
+ * Update one tracked item:
+ *   status     "confirmed" | "dismissed" | "suggested" | "done"
+ *              ("done" on a monthly item marks this month done and moves on to the next;
+ *               "confirmed" on a done item reopens it)
  *   eventDate  "YYYY-MM-DD" | null   (when the triggering event happened / will happen)
  *   dueDate    "YYYY-MM-DD" | null   (user's own date, overrides the calculation; null clears it)
  *   assigneeId uuid | null           (teammate who gets the reminders; null = whoever started tracking)
@@ -26,7 +28,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const admin = getSupabaseAdmin();
     const { data: o } = await admin
       .from("obligations")
-      .select("id, workspace_id, job_id, status, trigger, due_basis")
+      .select("id, workspace_id, job_id, status, trigger, due_basis, due_date")
       .eq("id", params.id)
       .maybeSingle();
     if (!o || !(await roleIn(admin, o.workspace_id, auth.user.id))) return jsonError(404, "Not found.");
@@ -41,8 +43,22 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     if (body.status !== undefined) {
       if (!STATUSES.has(body.status)) return jsonError(400, "Invalid status.");
-      if (body.status === "confirmed" && !o.job_id) return jsonError(409, "Start tracking this job first.", "needs_job");
-      patch.status = body.status;
+      if ((body.status === "confirmed" || body.status === "done") && !o.job_id) {
+        return jsonError(409, "Start tracking this job first.", "needs_job");
+      }
+      if (body.status === "done" && o.trigger === "monthly") {
+        // Repeating item: this month's is done; it stays tracked for next month.
+        if (!o.due_date) return jsonError(409, "Nothing due yet to mark done.");
+        patch.status = "confirmed";
+        patch.done_through = o.due_date;
+        if (o.due_basis === "manual") {
+          patch.due_date = null;
+          patch.due_basis = null;
+        }
+      } else {
+        patch.status = body.status;
+        patch.completed_at = body.status === "done" ? new Date().toISOString() : null;
+      }
     }
     if (body.eventDate !== undefined) {
       if (body.eventDate !== null && !isIsoDate(body.eventDate)) return jsonError(400, "Invalid date.");

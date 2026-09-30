@@ -32,7 +32,7 @@ From the landing page, metadata and system prompt:
 7. **Your action plan** rendered with "Not legal advice" and "Automated AI summary" banners.
 8. Review saved to the account ("Past contract reviews"), visible on any device.
 9. **Deadlines found in this contract** (Pro): the notice/payment deadlines the AI picked out, each with its clause quote and how the date is worked out. The user names the job and picks the site's nation (for bank holidays), then confirms the ones they want reminders for, enters event dates where a deadline runs from an event, or sets a date themselves.
-10. Reminder emails arrive two working days before and on the day. All tracked deadlines are listed under **Deadlines**.
+10. Reminder emails arrive 7 days before, 2 days before, on the day, and once when overdue. Everything tracked is listed under **Deadlines** ("Projects & deadlines"), where Pro users can also add their own projects and dates (application dates, payment due dates, notice deadlines, retention release) and mark items done. Every screen and email says "Reminders are a prompt only. Check your contract for exact dates."
 11. If the free allowance is used, next attempt shows "Upgrade to Pro" modal → Stripe Checkout.
 
 ## 4. Feature inventory
@@ -64,12 +64,12 @@ From the landing page, metadata and system prompt:
 | Manage billing / cancel | Stripe Customer Portal for the signed-in owner's workspace | `api/portal` |
 | Complimentary Pro | `workspaces.comp_pro` flag, set by hand in SQL (founder, testers) | README |
 | **Deadline extraction** | Second Claude call (structured output) alongside the review; up to 25 deadlines with kind, clause, quote, and trigger (fixed date / monthly / N days before or after an event). Anything without a clear period is dropped, never guessed. Pro-only by default | `lib/extractObligations.ts`, `lib/obligations.ts` |
-| **Job tracking** | Name + nation (England & Wales / Scotland / NI) per tracked contract | `api/jobs`, `DeadlinesPanel.tsx` |
+| **Project tracking (Pro)** | Projects ("jobs"): name + nation. Created from a check or on their own. Users add dated items (kind, name, date, optionally monthly); dates the check found are pre-filled as suggestions. Statuses: upcoming, due (within 7 days), overdue, done. Monthly items "done for this month" move to the next month | `api/jobs`, `api/obligations`, `lib/trackingStatus.ts`, `DeadlinesPanel.tsx`, migration 0007 |
 | **Confirm / dismiss / date** | Nothing is scheduled until the user confirms it. Event-based deadlines need the event date; any date can be overridden by hand | `api/obligations/[id]` |
 | **Date rules** | Calendar or working days as the contract says; if it doesn't say, the earlier of the two. Working days skip weekends and that nation's bank holidays (gov.uk feed, rule-based fallback). Monthly deadlines roll forward | `lib/deadlines.ts`, `lib/bankHolidays.ts` |
-| **Reminder emails** | Daily cron; one digest per person; 2 working days before + on the day; late confirmations get the heads-up immediately. Stops if Pro lapses, the deadline is dismissed, or the user opts out | `api/cron/reminders`, `claim_due_reminders()` |
-| **Deadlines view** | All confirmed deadlines: needs a date / coming up / passed | `DeadlinesView` |
-| **Reminder opt-out** | Toggle in the account menu | `api/me/preferences` |
+| **Reminder emails** | Daily cron (secret-protected); one digest per person; 7 days before, 2 days before, on the day, and once the day after if not done. Idempotent: rows are claimed with `FOR UPDATE SKIP LOCKED` and a kind already sent in a cycle is never rescheduled. Stops if Pro lapses, the item is done or dismissed, or the user opts out. One-click unsubscribe link + List-Unsubscribe headers | `api/cron/reminders`, `claim_due_reminders()`, `lib/deadlines.ts`, `api/unsubscribe` |
+| **Deadlines view** | Overdue / due in the next 7 days / upcoming / needs a date / done, plus add project and add date | `DeadlinesView` |
+| **Reminder opt-out** | Toggle in the account menu, or the unsubscribe link in every email | `api/me/preferences`, `api/unsubscribe` |
 | **Team workspaces** | Create a team (up to 3 owned), switch between Personal and teams. Reviews, jobs and deadlines in a team are shared with its members | `api/workspaces*`, `TeamPanel.tsx`, `ProfileMenu.tsx` |
 | **Invites** | Owner invites by email; single-use link, 7 days, only for that address; hashed token; emailed if Resend is set up, otherwise the link is shown once to copy. Revoke; accept on login | `api/workspaces/[id]/invites*`, `api/invites/accept`, `accept_workspace_invite()` |
 | **Per-seat Pro** | Owner buys N seats (≥ current members, ≤ 25) in Stripe Checkout; seats go owner first, then by join date; members without a seat use their own free check. Seat changes via the Stripe portal | `api/checkout`, `lib/entitlements.ts` |
@@ -163,7 +163,7 @@ The server decides Pro from Postgres (`subscriptions` kept in sync by the Stripe
 15. Cloud history retention. **Default shipped:** kept until the user deletes it or asks for account deletion; full contract text never stored. Is a fixed retention period (e.g. 24 months inactive) wanted?
 16. Team pricing. **Default shipped:** per seat, same price as Pro unless `STRIPE_TEAM_PRICE_ID` is set; cap 25 people per team (`MAX_TEAM_SEATS`). Is a flat team price or a volume discount wanted?
 17. Notice reminders. **Default shipped:** Pro-only (`REMINDERS_PRO_ONLY`), email only, notices = payment applications, payment/pay less notices, variation, EOT/delay/early warning/claim notices, retention release, final account, other time-limited notices. SMS or calendar export not built.
-18. Reminder timing. **Default shipped:** 2 working days before + on the day. Is that the right lead time for a site team?
+18. Reminder timing. **Resolved (owner, 2026-09-30):** 7 days, 2 days, on the day, and when overdue (calendar days).
 19. When the contract doesn't say calendar or working days. **Default shipped:** use whichever date is earlier, and say so in the UI and email. Alternative would be to follow the Construction Act's counting rules, which is closer to a legal interpretation.
 
 **Brand, domain and claims**

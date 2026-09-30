@@ -91,3 +91,19 @@ Before/after timings (one-page sample, photo / PDF / Word):
 | "Free users keep their latest result only" | Free users can list and open only their own latest check. Older checks are **hidden, not deleted** | Deleting would wipe a lapsed Pro subscriber's paid history the moment they run a free check, and the brief says stop before deleting user data. Account deletion still removes everything |
 | Where it's enforced | API (`/api/reviews`, `/api/reviews/[id]` → 402 `upgrade_required`), checked against the review's own workspace | RLS still limits rows to the user's workspace. A free user reading their own hidden rows straight from Supabase with their own token is possible and accepted: it's their data |
 | "Delete removes any stored file" | Nothing to remove: uploaded files are read in memory and discarded; only the result is stored. Delete cascades to that check's deadlines and reminders | As built since Phase 1 |
+
+### 3. Project tracking + reminders
+
+| Decision | Choice | Why |
+|---|---|---|
+| "Projects" | The existing `jobs` table; can now be created without a contract check | No new concept to maintain |
+| Dated items | The existing `obligations` table with `source = 'manual'`, no `review_id`, `trigger = fixed_date` (or monthly). New kind `payment_due` for manual items only; extraction's kind list is unchanged (no prompt change) | Reuses scheduling, reminders, RLS |
+| Statuses | Stored: `confirmed` / `done` (+ existing `suggested`/`dismissed`). Shown: overdue (date passed), due (today to 7 days out), upcoming (later or no date), done | "Due" window matches the first reminder |
+| Monthly items | "Done for this month" records `done_through` and moves to next month; they don't end | A monthly application is never finished |
+| Reminder days | Calendar days: 7 and 2 before, on the day, overdue the day after (or today if added late). Heads-ups already gone are dropped; if both have gone, one goes today | Owner's brief. Calendar, not working days: it's a prompt, and the contract date rules are shown on the item |
+| No duplicate emails | Claiming stays `FOR UPDATE SKIP LOCKED`; rescheduling never re-adds a kind already sent in the current cycle (on/after due − 7 days) | Edits can't resend. SQL test covers a same-day re-run |
+| Overdue for monthly items | The cron now sends first, then rolls monthly items forward, so the overdue notice for the one just missed goes out | Order change only |
+| Old 'lead' reminders | Still valid in the DB and treated as a heads-up | Additive migration; nothing rewritten |
+| Unsubscribe | Link in every reminder email, signed with HMAC (`UNSUBSCRIBE_SECRET`, else `CRON_SECRET`). GET shows a confirm button; POST unsubscribes (also RFC 8058 one-click via `List-Unsubscribe-Post`) | Mail scanners open GET links; a one-step GET would unsubscribe people by accident |
+| Email provider | Resend (already in the code) | Brief: use the existing provider |
+| Notice | "Reminders are a prompt only. Check your contract for exact dates." on the tracking view, the contract's deadlines panel and every email | Owner's wording |

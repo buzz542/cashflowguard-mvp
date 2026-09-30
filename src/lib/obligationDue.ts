@@ -1,4 +1,4 @@
-import { computeEventDue, isIsoDate, nextMonthlyDue, type DayBasis, type Direction } from "./deadlines";
+import { addCalendarDays, compareDates, computeEventDue, isIsoDate, nextMonthlyDue, type DayBasis, type Direction } from "./deadlines";
 
 export type DueBasis = "fixed" | "monthly" | "calendar" | "working" | "manual";
 
@@ -12,6 +12,8 @@ export type ObligationTiming = {
   event_date: string | null;
   due_date: string | null;
   due_basis: DueBasis | null;
+  /** Monthly items: the latest due date marked done. */
+  done_through?: string | null;
 };
 
 /**
@@ -28,7 +30,10 @@ export function computeDue(
   if (o.trigger === "fixed_date" && isIsoDate(o.fixed_date)) return { due_date: o.fixed_date, due_basis: "fixed" };
 
   if (o.trigger === "monthly" && o.day_of_month) {
-    return { due_date: nextMonthlyDue(o.day_of_month, today), due_basis: "monthly" };
+    // Next one on or after today, and after the last one marked done.
+    const afterDone = isIsoDate(o.done_through) ? addCalendarDays(o.done_through, 1) : today;
+    const from = compareDates(afterDone, today) > 0 ? afterDone : today;
+    return { due_date: nextMonthlyDue(o.day_of_month, from), due_basis: "monthly" };
   }
 
   if (o.trigger === "event" && isIsoDate(o.event_date) && o.offset_days !== null && o.direction) {

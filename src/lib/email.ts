@@ -6,14 +6,32 @@ export function emailConfigured(): boolean {
   return !!(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
 }
 
-export async function sendEmail(msg: { to: string; subject: string; html: string; text: string }): Promise<void> {
+export async function sendEmail(msg: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  /** Adds List-Unsubscribe (+ one-click) headers. */
+  unsubscribeUrl?: string | null;
+  replyTo?: string;
+}): Promise<void> {
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ from: process.env.EMAIL_FROM, to: [msg.to], subject: msg.subject, html: msg.html, text: msg.text }),
+    body: JSON.stringify({
+      from: process.env.EMAIL_FROM,
+      to: [msg.to],
+      subject: msg.subject,
+      html: msg.html,
+      text: msg.text,
+      ...(msg.replyTo ? { reply_to: msg.replyTo } : {}),
+      ...(msg.unsubscribeUrl
+        ? { headers: { "List-Unsubscribe": `<${msg.unsubscribeUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } }
+        : {})
+    }),
     signal: AbortSignal.timeout(10_000)
   });
   if (!res.ok) {

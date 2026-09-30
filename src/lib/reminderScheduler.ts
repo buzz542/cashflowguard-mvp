@@ -11,11 +11,12 @@ export function remindersAllowed(isPro: boolean): boolean {
 
 export const OBLIGATION_COLUMNS =
   "id, workspace_id, review_id, job_id, kind, title, clause_ref, source_quote, trigger, fixed_date, day_of_month, " +
-  "event_description, offset_days, direction, day_basis, status, event_date, due_date, due_basis, assignee_id, created_at";
+  "event_description, offset_days, direction, day_basis, status, event_date, due_date, due_basis, assignee_id, created_at, " +
+  "source, completed_at, done_through";
 
 type Row = ObligationTiming & {
   id: string;
-  status: "suggested" | "confirmed" | "dismissed";
+  status: "suggested" | "confirmed" | "dismissed" | "done";
   workspace_id: string;
   job_id: string | null;
   assignee_id: string | null;
@@ -67,7 +68,16 @@ export async function rescheduleObligation(admin: SupabaseClient, obligationId: 
   await admin.from("reminders").delete().eq("obligation_id", obligationId).eq("status", "pending");
 
   if (row.status === "confirmed" && due.due_date && recipient) {
-    const slots = reminderSlots(due.due_date, today, holidays);
+    const { data: sent } = await admin
+      .from("reminders")
+      .select("kind, send_on")
+      .eq("obligation_id", obligationId)
+      .in("status", ["sending", "sent"]);
+    const slots = reminderSlots(
+      due.due_date,
+      today,
+      (sent ?? []).map((r) => ({ kind: r.kind as string, sendOn: r.send_on as string }))
+    );
     if (slots.length) {
       const { error: insErr } = await admin.from("reminders").upsert(
         slots.map((s) => ({ obligation_id: obligationId, user_id: recipient, send_on: s.sendOn, kind: s.kind })),

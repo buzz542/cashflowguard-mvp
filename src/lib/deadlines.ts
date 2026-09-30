@@ -86,24 +86,47 @@ export function nextMonthlyDue(dayOfMonth: number, from: string): string {
   throw new Error("unreachable");
 }
 
-export type ReminderSlot = { sendOn: string; kind: "lead" | "due" };
+export type ReminderKind = "lead7" | "lead2" | "due" | "overdue";
+export type ReminderSlot = { sendOn: string; kind: ReminderKind };
 
-/** Working days of notice before the due date. */
-export const LEAD_WORKING_DAYS = 2;
+/** Calendar days from the due date for each reminder. */
+export const REMINDER_OFFSETS: ReadonlyArray<{ kind: ReminderKind; days: number }> = [
+  { kind: "lead7", days: -7 },
+  { kind: "lead2", days: -2 },
+  { kind: "due", days: 0 },
+  { kind: "overdue", days: 1 }
+];
 
 /**
- * When to email about a due date: a heads-up LEAD_WORKING_DAYS before, and on the day.
- * If the heads-up date has already passed, send it today instead. Nothing for past dates.
+ * When to email about a due date: 7 days before, 2 days before, on the day, and once the
+ * day after if it's still not marked done. Dates already gone are dropped; if both
+ * heads-ups are gone but the date is still ahead, one heads-up goes today. If the date
+ * has already passed, one overdue notice goes today.
+ *
+ * `alreadySent` lists reminders sent (or being sent) for this deadline: a kind already
+ * sent in this cycle (on or after due - 7 days) is never scheduled again, so editing a
+ * deadline can't produce a duplicate email.
  */
-export function reminderSlots(dueDate: string, today: string, holidays: Set<string>): ReminderSlot[] {
-  if (compareDates(dueDate, today) < 0) return [];
-  if (dueDate === today) return [{ sendOn: today, kind: "due" }];
-  const lead = addWorkingDays(dueDate, -LEAD_WORKING_DAYS, holidays);
-  const leadOn = compareDates(lead, today) < 0 ? today : lead;
-  return [
-    { sendOn: leadOn, kind: "lead" },
-    { sendOn: dueDate, kind: "due" }
-  ];
+export function reminderSlots(
+  dueDate: string,
+  today: string,
+  alreadySent: ReadonlyArray<{ kind: string; sendOn: string }> = []
+): ReminderSlot[] {
+  const cycleStart = addCalendarDays(dueDate, -7);
+  const sent = new Set(alreadySent.filter((r) => compareDates(r.sendOn, cycleStart) >= 0).map((r) => r.kind));
+  let slots: ReminderSlot[];
+  if (compareDates(dueDate, today) < 0) {
+    slots = [{ sendOn: compareDates(addCalendarDays(dueDate, 1), today) < 0 ? today : addCalendarDays(dueDate, 1), kind: "overdue" }];
+  } else {
+    slots = REMINDER_OFFSETS.map((o) => ({ sendOn: addCalendarDays(dueDate, o.days), kind: o.kind })).filter(
+      (s) => compareDates(s.sendOn, today) >= 0
+    );
+    const hasLead = slots.some((s) => s.kind === "lead7" || s.kind === "lead2");
+    if (!hasLead && compareDates(today, dueDate) < 0 && !sent.has("lead2") && !sent.has("lead7")) {
+      slots.unshift({ sendOn: today, kind: "lead2" });
+    }
+  }
+  return slots.filter((s) => !sent.has(s.kind));
 }
 
 /** Today's date in the UK, regardless of server timezone. */

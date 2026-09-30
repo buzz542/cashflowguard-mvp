@@ -16,7 +16,7 @@ export type Me = {
 export type ObligationRow = {
   id: string;
   workspace_id: string;
-  review_id: string;
+  review_id: string | null;
   job_id: string | null;
   kind: string;
   title: string;
@@ -29,12 +29,15 @@ export type ObligationRow = {
   offset_days: number | null;
   direction: "after" | "before" | null;
   day_basis: "calendar" | "working" | "unspecified";
-  status: "suggested" | "confirmed" | "dismissed";
+  status: "suggested" | "confirmed" | "dismissed" | "done";
   event_date: string | null;
   due_date: string | null;
   due_basis: "fixed" | "monthly" | "calendar" | "working" | "manual" | null;
   assignee_id: string | null;
   created_at: string;
+  source?: "contract" | "manual";
+  completed_at?: string | null;
+  done_through?: string | null;
 };
 
 export type TeamMember = { userId: string; email: string; name: string; role: "owner" | "member"; joinedAt: string; hasSeat: boolean };

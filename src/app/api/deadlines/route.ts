@@ -6,7 +6,7 @@ import { OBLIGATION_COLUMNS } from "@/lib/reminderScheduler";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** Tracked deadlines (confirmed) for the active workspace, soonest first, plus the jobs they belong to. */
+/** Tracked items (confirmed or done) for the active workspace, soonest first, plus the projects they belong to. */
 export async function GET(req: NextRequest) {
   const auth = await requireUser();
   if ("response" in auth) return auth.response;
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
         .from("obligations")
         .select(OBLIGATION_COLUMNS)
         .eq("workspace_id", ctx.workspace.id)
-        .eq("status", "confirmed")
+        .in("status", ["confirmed", "done"])
         .order("due_date", { ascending: true, nullsFirst: false })
         .limit(200),
       supabase
