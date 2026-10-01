@@ -720,19 +720,19 @@ export default function HomeClient({
         {bannerEl}
 
         <section className="max-w-3xl mx-auto px-4 pt-16 pb-14 text-center">
-          <p className="text-xs font-semibold tracking-[0.2em] text-blue-600 uppercase mb-5">Cash flow protection</p>
+          <p className="text-xs font-semibold tracking-[0.2em] text-blue-600 uppercase mb-5">Contract risk check</p>
           <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 leading-tight">
             Before you sign it,<br />know what it means.
           </h1>
           <p className="mt-6 text-lg text-gray-600 max-w-2xl mx-auto">
-            Photograph or upload a construction contract. Get plain-English payment
-            risks under English law — so you get paid on time, not left chasing retention
-            and pay-when-paid clauses.
+            Photograph or upload a construction contract. An AI summary flags payment risks
+            like retention, pay-when-paid and notice deadlines in plain English, so you know
+            what to ask about before you sign.
           </p>
           <button type="button" onClick={startCheck} className="mt-8 bg-blue-600 text-white font-semibold px-8 py-3.5 rounded-xl">
             Check a document — free first pass
           </button>
-          <p className="mt-4 text-xs text-gray-500">Built for UK subcontractors and freelancers under 25 staff. Not legal advice.</p>
+          <p className="mt-4 text-xs text-gray-500">Built for UK subcontractors and freelancers under 25 staff. Automated AI summary, not legal advice.</p>
         </section>
 
         <section className="border-y bg-[#FAFAF9] py-10">
