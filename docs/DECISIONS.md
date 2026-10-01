@@ -152,3 +152,12 @@ Before/after timings (one-page sample, photo / PDF / Word):
 | Error messages | No route returns an exception message; all are fixed strings | None needed |
 | Email header injection | Help request contact email becomes Reply-To | Tightened: no commas, semicolons, quotes, angle brackets; subject strips newlines |
 | Known, accepted | In-memory hourly limits reset per server instance (the durable limits are in Postgres); CSP keeps `'unsafe-inline'`/`'unsafe-eval'` for Next.js scripts | Already in IDEAS.md / unchanged |
+
+### Go-live (2026-10-01)
+
+| Decision | Choice | Why |
+|---|---|---|
+| Supabase project | `ifoszxgnufurnepxxddb`, eu-west-1 (Ireland) | Created by the owner; UK GDPR-friendly region |
+| Function region | `dub1` (Dublin) in `vercel.json` | Next to the database; was `iad1` (US East), which adds a transatlantic round trip per query |
+| Applying migrations | 0001 tables + 2 functions via the Supabase connector; the rest pasted by the owner in the SQL editor (the connector stalls on statements containing delete/revoke) | Same SQL as `supabase/migrations`, verified locally first |
+| Advisor notes left as is | 3 service-only tables with RLS and no policies (intended); `is_workspace_member`, `is_workspace_owner`, `shares_workspace_with` executable by anon (return false without a session; needed by RLS policies for signed-in users) | No data exposed |
