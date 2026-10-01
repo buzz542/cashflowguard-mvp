@@ -1,55 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
-import { rateLimit, clientIp } from "@/lib/rateLimit";
+import { rateLimit } from "@/lib/rateLimit";
+import { requireUser, loadWorkspaceContext, jsonError, ACTIVE_WORKSPACE_COOKIE } from "@/lib/session";
+import { getStripe } from "@/lib/stripe";
+import { appOrigin } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** Create a Stripe Customer Portal session so users can cancel / update billing. */
+/**
+ * Stripe Customer Portal for the active workspace. The customer comes from our own
+ * database, keyed by the signed-in owner's workspace: never from anything the client sends.
+ */
 export async function POST(req: NextRequest) {
   try {
-    const ip = clientIp(req);
-    const rl = rateLimit(`portal:${ip}`, 10, 60_000);
-    if (!rl.ok) {
-      return NextResponse.json(
-        { error: "Too many requests. Try again shortly." },
-        { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } }
-      );
-    }
+    const auth = await requireUser();
+    if ("response" in auth) return auth.response;
 
-    const secret = process.env.STRIPE_SECRET_KEY;
-    if (!secret) {
-      return NextResponse.json({ error: "Billing is not configured." }, { status: 500 });
-    }
+    const rl = rateLimit(`portal:${auth.user.id}`, 10, 60_000);
+    if (!rl.ok) return jsonError(429, "Too many requests. Try again shortly.");
 
-    const body = await req.json().catch(() => ({}));
-    const email = typeof body.email === "string" ? body.email.toLowerCase().trim() : "";
-    if (!email || !email.includes("@") || email.length > 254) {
-      return NextResponse.json({ error: "Valid email required." }, { status: 400 });
-    }
+    const stripe = getStripe();
+    if (!stripe) return jsonError(500, "Billing is not configured.");
 
-    const stripe = new Stripe(secret);
-    const customers = await stripe.customers.list({ email, limit: 1 });
-    if (!customers.data.length) {
-      return NextResponse.json(
-        { error: "No billing account found for this email. Subscribe first." },
-        { status: 404 }
-      );
-    }
+    const ctx = await loadWorkspaceContext(auth.user, auth.email, req.cookies.get(ACTIVE_WORKSPACE_COOKIE)?.value);
+    if (ctx.workspace.role !== "owner") return jsonError(403, "Only the workspace owner can manage billing.");
+    const customer = ctx.subscription?.stripeCustomerId;
+    if (!customer) return jsonError(404, "No billing account yet. Subscribe first.");
 
-    const origin =
-      req.headers.get("origin") ||
-      process.env.NEXT_PUBLIC_APP_URL ||
-      "https://guardconstruct.com";
-
-    const session = await stripe.billingPortal.sessions.create({
-      customer: customers.data[0].id,
-      return_url: `${origin}/`
-    });
-
+    const session = await stripe.billingPortal.sessions.create({ customer, return_url: `${appOrigin(req)}/` });
     return NextResponse.json({ url: session.url });
   } catch (error: unknown) {
-    console.error("Portal error:", error);
-    return NextResponse.json({ error: "Could not open billing portal." }, { status: 500 });
+    console.error("Portal error:", error instanceof Error ? error.message : error);
+    return jsonError(500, "Could not open billing portal.");
   }
 }

@@ -1,9 +1,15 @@
 /** @type {import('next').NextConfig} */
+// The browser talks to Supabase directly for login, so it must be allowed by the CSP.
+const supabaseOrigin = (() => {
+  try {
+    return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL || "").origin;
+  } catch {
+    return "https://*.supabase.co";
+  }
+})();
+
 const nextConfig = {
   experimental: {
-    serverActions: {
-      bodySizeLimit: "12mb"
-    },
     serverComponentsExternalPackages: ["pdf-parse", "mammoth"]
   },
   async headers() {
@@ -26,7 +32,7 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob:",
               "font-src 'self' data:",
-              "connect-src 'self' https://api.stripe.com https://checkout.stripe.com",
+              `connect-src 'self' ${supabaseOrigin} https://api.stripe.com https://checkout.stripe.com`,
               "frame-src https://checkout.stripe.com https://js.stripe.com",
               "base-uri 'self'",
               "form-action 'self' https://checkout.stripe.com"

@@ -20,7 +20,7 @@ export default function TermsPage() {
       </header>
       <main className="max-w-3xl mx-auto px-4 py-10 prose prose-sm prose-gray">
         <h1 className="text-3xl font-bold mb-2">Terms of Use</h1>
-        <p className="text-sm text-gray-500 mb-8">Last updated: 29 September 2026 · England &amp; Wales</p>
+        <p className="text-sm text-gray-500 mb-8">Last updated: 30 September 2026 · England &amp; Wales</p>
 
         <h2 className="text-lg font-bold mt-8 mb-2">1. The service</h2>
         <p>
@@ -45,16 +45,56 @@ export default function TermsPage() {
 
         <h2 className="text-lg font-bold mt-8 mb-2">4. Accounts and free tier</h2>
         <p>
-          You are responsible for activity under your account. The free tier is limited (including one free check per
-          account as presented in the product). We may change limits, refuse service, or suspend abuse.
+          You are responsible for activity under your account. The free tier is limited to the number of free checks
+          shown on our pricing page, per person. Email aliases of the same inbox count as one person. Free checks are
+          also limited per network per day, and we may pause free checks for everyone on a given day to protect the
+          service. We may change limits, refuse service, or suspend abuse.
+        </p>
+
+        <h2 className="text-lg font-bold mt-8 mb-2">4A. Team workspaces (when available)</h2>
+        <p>
+          You can create a team workspace and invite people by email. The person who creates it (the owner) is responsible
+          for its membership and billing. Everyone in a team can see the reviews and tracked deadlines created in it, and
+          these stay with the team if someone leaves or is removed. Pro in a team is bought per seat; seats go to the owner
+          first and then to members in the order they joined. Members without a seat use their own free allowance.
         </p>
 
         <h2 className="text-lg font-bold mt-8 mb-2">5. Subscriptions and cancellation</h2>
         <p>
-          Pro is billed via Stripe at the price shown at checkout (currently £19/month unless stated otherwise). You
+          Pro is billed via Stripe at the price shown at checkout (currently £19/month unless stated otherwise). Pro
+          includes unlimited checks, subject to fair-use rate limits that stop automated or abusive use. You
           can manage or cancel your subscription through the <strong>Manage billing</strong> link in your profile
           (Stripe Customer Portal) or via Stripe&apos;s receipts. Cancellation stops future renewals; charges already
           taken are handled under Stripe&apos;s and applicable consumer rules.
+        </p>
+
+        <h2 className="text-lg font-bold mt-8 mb-2">5A. Your review history</h2>
+        <p>
+          We keep the results of your checks in your account so you can return to them. Pro accounts can see all of
+          them; free accounts can see their latest. You can delete any review you can see at any time, and ask us to
+          delete the rest. We don&apos;t keep the files you upload. See the Privacy Policy for what is stored and for how long.
+        </p>
+
+        <h2 className="text-lg font-bold mt-8 mb-2">5B. Project tracking and deadline reminders</h2>
+        <p>
+          <strong>Reminders are a prompt only. Check your contract for exact dates.</strong> With Pro, you can track
+          projects and dates, and GuardConstruct can pick notice and payment deadlines out of a contract and email you
+          7 days before, 2 days before, on the day and when a date has passed. Deadlines are identified by AI and <strong>may be wrong, incomplete or missing</strong>. Dates depend on
+          information you give us (such as when an event happened) and on how we count days, which we explain in the
+          app. You must check each deadline against the contract yourself. Reminders are a convenience only: we don&apos;t
+          guarantee that any reminder will be sent, arrive, or arrive on time, and you remain responsible for meeting
+          your contractual deadlines. The limits in section 8 apply.
+        </p>
+
+        <h2 className="text-lg font-bold mt-8 mb-2">5C. Help getting paid and referral fees</h2>
+        <p>
+          If you use <strong>Need help getting paid?</strong>, you send us details of money you say you are owed. If you
+          tick the consent box, we may introduce you to a solicitor or adjudication service. <strong>They may pay us a
+          referral fee</strong> for that introduction. We will not pass on your request without that consent, and we
+          don&apos;t pass anything on automatically. You don&apos;t have to use anyone we suggest; agree any fees directly with
+          them. Partners are independent of us and are
+          responsible for their own advice and services. We don&apos;t give legal advice about your claim and can&apos;t
+          promise any outcome.
         </p>
 
         <h2 className="text-lg font-bold mt-8 mb-2">6. Acceptable use</h2>

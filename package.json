@@ -3,29 +3,42 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": "20.x"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:db": "./scripts/test-db.sh",
+    "lint": "next lint",
+    "check": "npm run -s lint && npm run -s typecheck && npm test -s && npm run -s test:db && npm run -s build",
+    "eval:extraction": "vitest run --config vitest.eval.config.mts evals/extraction.eval.ts",
+    "eval:timing": "vitest run --config vitest.eval.config.mts evals/timing.eval.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.129.0",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.2",
+    "mammoth": "^1.8.0",
     "next": "14.2.25",
+    "pdf-parse": "^1.1.1",
     "react": "^18",
     "react-dom": "^18",
-    "@anthropic-ai/sdk": "^0.27.0",
     "stripe": "^17.0.0",
-    "mammoth": "^1.8.0",
-    "pdf-parse": "^1.1.1"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "typescript": "^5",
-    "@types/node": "^20",
+    "@types/node": "^22.20.4",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "tailwindcss": "^3.4.1",
+    "autoprefixer": "^10.0.1",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.25",
     "postcss": "^8",
-    "autoprefixer": "^10.0.1"
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5",
+    "vitest": "^5.0.2"
   }
 }

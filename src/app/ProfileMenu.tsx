@@ -1,81 +1,36 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-
-export type User = {
-  email: string;
-  passwordHash: string;
-  freeUsed: boolean;
-  isPro?: boolean;
-  name?: string;
-};
-
-export type SavedReview = {
-  id: string;
-  createdAt: string;
-  trade: string;
-  role: string;
-  preview: string;
-  result: string;
-};
-
-export const PRO_ACCOUNTS: Record<string, string> = {
-  "tobyburrows1@icloud.com": "Toby Burrows"
-};
-
-export function isProEmail(email: string) {
-  return Object.prototype.hasOwnProperty.call(PRO_ACCOUNTS, email.toLowerCase());
-}
-
-export function withEntitlements(u: User): User {
-  const email = (u.email || "").toLowerCase().trim();
-  if (isProEmail(email)) {
-    return {
-      ...u,
-      email,
-      isPro: true,
-      freeUsed: false,
-      name: u.name || PRO_ACCOUNTS[email] || email.split("@")[0]
-    };
-  }
-  return { ...u, email, name: u.name || email.split("@")[0] };
-}
-
-export function loadReviews(email: string): SavedReview[] {
-  try {
-    const raw = localStorage.getItem("gc_reviews_" + email.toLowerCase());
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as SavedReview[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-export function saveReview(email: string, review: SavedReview) {
-  const list = loadReviews(email);
-  const next = [review, ...list.filter((r) => r.id !== review.id)].slice(0, 30);
-  localStorage.setItem("gc_reviews_" + email.toLowerCase(), JSON.stringify(next));
-  return next;
-}
+import type { Me, ReviewSummary } from "@/lib/clientTypes";
 
 export function ProfileMenu({
-  user,
+  me,
   onLogout,
   onManageBilling,
   reviews = [],
   onOpenReview,
-  onViewAllReviews
+  onViewAllReviews,
+  onViewDeadlines,
+  onToggleReminders,
+  onSwitchWorkspace,
+  onOpenTeam,
+  onDeleteAccount
 }: {
-  user: User;
+  me: Me;
   onLogout: () => void;
   onManageBilling?: () => void;
-  reviews?: SavedReview[];
-  onOpenReview?: (review: SavedReview) => void;
+  reviews?: ReviewSummary[];
+  onOpenReview?: (id: string) => void;
   onViewAllReviews?: () => void;
+  onViewDeadlines?: () => void;
+  onToggleReminders?: (on: boolean) => void;
+  onSwitchWorkspace?: (workspaceId: string) => void;
+  onOpenTeam?: () => void;
+  onDeleteAccount?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const user = me.user!;
   const initial = (user.name || user.email || "?").charAt(0).toUpperCase();
 
   useEffect(() => {
@@ -98,17 +53,17 @@ export function ProfileMenu({
           {initial}
         </span>
         <span className="flex flex-col items-start leading-tight">
-          <span className="text-xs font-semibold text-gray-900 max-w-[100px] truncate">
-            {user.name || "Account"}
-          </span>
-          <span className={`text-[10px] font-semibold ${user.isPro ? "text-blue-600" : "text-gray-500"}`}>
-            {user.isPro ? "Pro" : "Free"}
+          <span className="text-xs font-semibold text-gray-900 max-w-[100px] truncate">{user.name || "Account"}</span>
+          <span className={`text-[10px] font-semibold ${me.isPro ? "text-blue-600" : "text-gray-500"}`}>
+            {me.isPro ? "Pro" : "Free"}
           </span>
         </span>
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-72 rounded-xl border bg-white shadow-lg p-3 z-50">
+        // Phones: pinned under the header, full width. The avatar isn't at the screen edge, so a
+        // right-anchored 288px menu used to hang ~90px off the left of a 390px screen.
+        <div className="fixed left-4 right-4 top-14 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-72 max-h-[80vh] overflow-y-auto rounded-xl border bg-white shadow-lg p-3 z-50">
           <div className="flex items-center gap-3 pb-3 border-b">
             <span className="h-10 w-10 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center">
               {initial}
@@ -119,22 +74,48 @@ export function ProfileMenu({
             </div>
           </div>
 
+          {(me.workspaces?.length ?? 0) > 1 && onSwitchWorkspace && (
+            <div className="py-3 border-b">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Workspace</p>
+              <ul className="space-y-0.5">
+                {me.workspaces!.map((w) => (
+                  <li key={w.id}>
+                    <button
+                      type="button"
+                      disabled={w.id === me.workspace?.id}
+                      onClick={() => { setOpen(false); onSwitchWorkspace(w.id); }}
+                      className={`w-full text-left rounded-lg px-2 py-1.5 text-sm ${w.id === me.workspace?.id ? "bg-blue-50 text-blue-800 font-semibold" : "hover:bg-gray-50"}`}
+                    >
+                      {w.personal ? "Personal" : w.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="py-3 space-y-1.5 text-sm border-b">
             <div className="flex justify-between items-center">
               <span className="text-gray-500">Plan</span>
               <span
                 className={`font-semibold px-2 py-0.5 rounded-full text-xs ${
-                  user.isPro ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-700"
+                  me.isPro ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-700"
                 }`}
               >
-                {user.isPro ? "Pro" : "Free"}
+                {me.isPro ? "Pro" : "Free"}
               </span>
             </div>
+            {!me.isPro && me.free && (
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500">Free checks left</span>
+                <span className="text-xs font-semibold text-gray-700">{me.free.remaining}</span>
+              </div>
+            )}
           </div>
 
           <div className="py-3 border-b">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Past scans</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Past reviews</p>
               {onViewAllReviews && reviews.length > 0 && (
                 <button type="button" className="text-[10px] text-blue-600" onClick={() => { setOpen(false); onViewAllReviews(); }}>
                   View all
@@ -142,7 +123,7 @@ export function ProfileMenu({
               )}
             </div>
             {reviews.length === 0 ? (
-              <p className="text-xs text-gray-400">No scans on this device yet.</p>
+              <p className="text-xs text-gray-400">No reviews yet.</p>
             ) : (
               <ul className="space-y-1 max-h-36 overflow-y-auto">
                 {reviews.slice(0, 5).map((r) => (
@@ -150,18 +131,37 @@ export function ProfileMenu({
                     <button
                       type="button"
                       className="w-full text-left rounded-lg px-2 py-1.5 hover:bg-gray-50"
-                      onClick={() => { setOpen(false); onOpenReview?.(r); }}
+                      onClick={() => { setOpen(false); onOpenReview?.(r.id); }}
                     >
                       <p className="text-xs font-medium text-gray-900 truncate">{r.trade || "Contract check"}</p>
-                      <p className="text-[10px] text-gray-500">
-                        {new Date(r.createdAt).toLocaleDateString("en-GB")}
-                      </p>
+                      <p className="text-[10px] text-gray-500">{new Date(r.created_at).toLocaleDateString("en-GB")}</p>
                     </button>
                   </li>
                 ))}
               </ul>
             )}
           </div>
+
+          {(onViewDeadlines || onToggleReminders || onOpenTeam) && (
+            <div className="py-3 border-b space-y-2">
+              {onViewDeadlines && (
+                <button type="button" className="block text-sm text-blue-600 font-medium" onClick={() => { setOpen(false); onViewDeadlines(); }}>
+                  Deadlines I&apos;m tracking
+                </button>
+              )}
+              {onOpenTeam && (
+                <button type="button" className="block text-sm text-blue-600 font-medium" onClick={() => { setOpen(false); onOpenTeam(); }}>
+                  {me.workspace && !me.workspace.personal ? "Team settings" : "Teams"}
+                </button>
+              )}
+              {onToggleReminders && (
+                <label className="flex items-center justify-between text-sm text-gray-700">
+                  <span>Email reminders</span>
+                  <input type="checkbox" checked={me.reminderEmails ?? true} onChange={(e) => onToggleReminders(e.target.checked)} />
+                </label>
+              )}
+            </div>
+          )}
 
           {onManageBilling && (
             <button
@@ -179,6 +179,15 @@ export function ProfileMenu({
           >
             Log out
           </button>
+          {onDeleteAccount && (
+            <button
+              type="button"
+              onClick={() => { setOpen(false); onDeleteAccount(); }}
+              className="w-full text-left text-xs text-gray-500 py-2 px-1 rounded-lg hover:bg-gray-50"
+            >
+              Delete my account
+            </button>
+          )}
         </div>
       )}
     </div>
