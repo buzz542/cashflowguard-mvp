@@ -65,7 +65,7 @@ export function loadConfig(env: Env = process.env) {
 export const config = loadConfig();
 
 /** Bump when the Terms or Privacy Policy change materially; users must re-accept. */
-export const TERMS_VERSION = "2026-09-30.1";
+export const TERMS_VERSION = "2026-10-01.1";
 
 /** Bump when the review system prompt changes, so stored reviews record which one produced them. */
 export const PROMPT_VERSION = "2026-09-30.1";
